@@ -45,7 +45,8 @@ import {
   Archive,
   ChevronDown,
   Star,
-  GraduationCap
+  GraduationCap,
+  Download
 } from 'lucide-react';
 import { ProjectBlueprint, FlagshipProject, RagCitation, RagStatusResponse, SyntheticDataType, SyntheticVariant } from './types';
 import WhitePaperBlogTab from './components/WhitePaperBlogTab';
@@ -55,17 +56,29 @@ import ProjectTelemetryCharts from './components/ProjectTelemetryCharts';
 import AnnotatedCodePipeline from './components/AnnotatedCodePipeline';
 import RepoRagIngestionPanel from './components/RepoRagIngestionPanel';
 import ProjectSyntheticDatasetPanel from './components/ProjectSyntheticDatasetPanel';
+import GoogleScholarWhitePaper from './components/GoogleScholarWhitePaper';
+import ProjectEconomicsPanel from './components/ProjectEconomicsPanel';
+import MLTrainingSimulatorTab, { SimConfigState, TrainingLogEntry } from './components/MLTrainingSimulatorTab';
+import { downloadProjectGitZip } from './utils/gitRepoBuilder';
+import { computeProjectEconomics, formatInrCompact } from './utils/projectEconomics';
 import {
+  ENCRYPTION_MECHANISM_META,
+  LEARNING_RATE_PRESETS,
+  ML_TECHNIQUE_META,
+  PROGRAMMING_ARCHITECTURE_META,
   SYNTHETIC_DATA_TYPE_META,
   SYNTHETIC_VARIANT_META,
-  generateSyntheticSamples,
-  getSyntheticDatasetProfile,
+  computeLatencyP95P99,
+  inferBestLearningRate,
+  inferBestMlTechnique,
+  inferBestProgrammingArch,
   inferProjectDataType
 } from './utils/syntheticDataset';
 import { EXTERNAL_URL_PROJECTS } from './data/importedProjects';
 import { RESEARCH_GRADE_PROJECTS } from './data/researchGradeProjects';
 import { CYBERSECURITY_RESEARCH_PROJECTS } from './data/cybersecurityProjects';
 import { UIDAI_DPI_PROJECTS } from './data/uidaiProjects';
+import { WORLD_SCALE_COMMERCIAL_PROJECTS } from './data/worldScaleCommercialProjects';
 
 const FLAGSHIP_PROJECTS: FlagshipProject[] = [
   {
@@ -148,9 +161,9 @@ model = SwinUNETR(
       breakingGround: 'First open-source hierarchical 3D Swin Transformer pretrained via Masked Volume Modeling (MVM) on 1.2M unlabelled scans, paired with zero-copy Rust DICOM parsing for deterministic sub-30ms clinical edge inference.',
       scope: 'Automated computer-aided diagnosis for 3D volumetric medical imaging (CT scans), integrating Rust for high-speed DICOM parsing and ONNX Runtime for clinical edge deployment.',
       functionality: '1. Memory-mapped zero-copy DICOM parsing in Rust.\n2. Isotropic voxel resampling and Hounsfield unit windowing.\n3. 3D Swin Transformer encoder-decoder segmentation.\n4. Rust-hosted ONNX Runtime execution for sub-30ms clinical inference.',
-      abstract: 'This research white paper proposes a 3D Hierarchical Swin Transformer combined with Rust-accelerated DICOM preprocessing and TensorRT/ONNX Runtime inference.',
-      methodology: 'Volumetric data parsing is offloaded to Rust workers to eliminate Python memory overhead, feeding preprocessed tensors directly into GPU memory.',
-      architecture: 'Rust preprocessing daemon communicating with C++ ONNX Runtime via FFI shared memory buffers.',
+      abstract: 'This research white paper proposes a 3D Hierarchical Swin Transformer combined with Rust-accelerated DICOM preprocessing and open-source Apache TVM / OpenVINO / ONNX Runtime inference.',
+      methodology: 'Volumetric data parsing is offloaded to Rust io_uring workers to eliminate Python memory overhead, feeding preprocessed tensors directly into GPU/CPU memory.',
+      architecture: 'Rust preprocessing daemon communicating with C++20 Seastar / ONNX Runtime via Apache Arrow zero-copy shared memory buffers.',
       benchmarks: 'Achieved 35 volumetric scans per second throughput with 28ms P95 inference latency on NVIDIA Jetson Orin edge hardware.',
       productionConsiderations: 'Strict memory safety guarantees, zero data corruption during concurrent medical scan ingestion, and HIPAA-compliant audit logging.'
     }
@@ -1628,7 +1641,8 @@ const DATACAMP_REPOSITORY_PROJECTS: FlagshipProject[] = [
       "benchmarks": "Achieved 92.4% MRR@5 retrieval precision and 95.1% grounded faithfulness.",
       "productionConsiderations": "Continuous vector index synchronization and metadata security filtering."
     }
-  }
+  },
+  ...WORLD_SCALE_COMMERCIAL_PROJECTS
 ];
 
 const ALL_REPOSITORY_PROJECTS: FlagshipProject[] = [
@@ -1645,7 +1659,7 @@ const ALL_REPOSITORY_PROJECTS: FlagshipProject[] = [
 
 const STARRED_REPO_STORAGE_KEY = 'ml_studio_starred_repo_ids_v1';
 
-// Top 5 standout research-grade projects selected from ML Repository across UIDAI DPI, Cybersecurity & Multimodal Diffusion
+// Top 5 standout research-grade projects selected from ML Case Studies across UIDAI DPI, Cybersecurity & Multimodal Diffusion
 const DEFAULT_STARRED_REPO_IDS: string[] = [
   'uidai-multimodal-biometric-pad',
   'uidai-ekyc-fraud-prevention',
@@ -1735,53 +1749,49 @@ export default function App() {
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [showBuilderWhitePaper, setShowBuilderWhitePaper] = useState(false);
 
-  // Training Simulator State (Project + Selected Synthetic Data Type)
+  // ML Training Simulator State (1.50B Cohort + 20-Year Horizon + Architecture, ML & Encryption)
   const allProjectsCatalog: FlagshipProject[] = [...FLAGSHIP_PROJECTS, ...ALL_REPOSITORY_PROJECTS];
-  const [simConfig, setSimConfig] = useState<{
-    projectId: string;
-    dataType: SyntheticDataType;
-    syntheticVariant: SyntheticVariant;
-    sampleCount: number;
-    seed: number;
-    learningRate: string;
-    batchSize: string;
-    epochs: number;
-    optimizer: string;
-    architecture: string;
-  }>({
+  const [simConfig, setSimConfig] = useState<SimConfigState>({
     projectId: FLAGSHIP_PROJECTS[0].id,
     dataType: inferProjectDataType(FLAGSHIP_PROJECTS[0]),
     syntheticVariant: 'balanced',
-    sampleCount: 25000,
+    sampleCount: 1500000000,
+    annualDeltaPct: 2.4,
+    horizonYears: 20,
     seed: 42,
-    learningRate: '0.0001',
-    batchSize: '16',
+    learningRate: inferBestLearningRate(FLAGSHIP_PROJECTS[0]).lrValue,
+    batchSize: '32',
     epochs: 12,
     optimizer: 'AdamW',
-    architecture: FLAGSHIP_PROJECTS[0].techStack.slice(0, 2).join(' + ')
+    architecture: FLAGSHIP_PROJECTS[0].techStack.slice(0, 2).join(' + '),
+    programmingArch: inferBestProgrammingArch(FLAGSHIP_PROJECTS[0]),
+    mlTechnique: inferBestMlTechnique(FLAGSHIP_PROJECTS[0]),
+    encryptionProfile: 'pqc_hybrid_vault'
   });
   const [isTraining, setIsTraining] = useState(false);
   const [trainingEpoch, setTrainingEpoch] = useState(0);
-  const [trainingLogs, setTrainingLogs] = useState<{
-    epoch: number;
-    loss: number;
-    accuracy: number;
-    valLoss: number;
-    valAcc: number;
-    sigma: number;
-    throughput: number;
-    dataTypeLabel: string;
-  }[]>([]);
+  const [trainingLogs, setTrainingLogs] = useState<TrainingLogEntry[]>([]);
   const trainingIntervalRef = useRef<number | null>(null);
 
   // RAG Knowledge Base & AI Copilot Chat State
   const [ragStatus, setRagStatus] = useState<RagStatusResponse | null>(null);
   const [useRagGrounding, setUseRagGrounding] = useState(true);
+  const [copilotSearchMode, setCopilotSearchMode] = useState<'hybrid' | 'dense' | 'bm25'>('hybrid');
   const [chatMessages, setChatMessages] = useState<{ sender: 'user' | 'ai'; text: string; citations?: RagCitation[] }[]>([
-    { sender: 'ai', text: 'Hello! I am your RAG-Enabled AI/ML Principal Copilot. Ingest PDFs or raw text in the Repository tab to index chunks into FAISS, then ask questions here grounded in your documents.' }
+    { sender: 'ai', text: 'Hello! I am your Hybrid RAG-Enabled AI/ML Principal Copilot. Ingest PDFs or raw text in the Repository tab to index chunks into FAISS + BM25, then ask questions here grounded in your documents.' }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [copilotMonitor, setCopilotMonitor] = useState({
+    totalRequests: 0,
+    successCount: 0,
+    lastLatencyMs: 0,
+    avgLatencyMs: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    lastPromptTokens: 0,
+    lastCompletionTokens: 0
+  });
 
   const fetchRagStatus = async () => {
     try {
@@ -1892,7 +1902,7 @@ ${p.code}
     }
   };
 
-  const runTrainingSimulation = (overrideConfig?: typeof simConfig) => {
+  const runTrainingSimulation = (overrideConfig?: SimConfigState) => {
     const cfg = overrideConfig || simConfig;
     if (trainingIntervalRef.current !== null) {
       window.clearInterval(trainingIntervalRef.current);
@@ -1909,37 +1919,97 @@ ${p.code}
 
     const varMeta = SYNTHETIC_VARIANT_META[cfg.syntheticVariant];
     const typeMeta = SYNTHETIC_DATA_TYPE_META[cfg.dataType];
-    const batchMult = Math.max(0.75, Math.min(1.6, Number(cfg.batchSize) / 16));
+    const progMeta = PROGRAMMING_ARCHITECTURE_META[cfg.programmingArch];
+    const mlMeta = ML_TECHNIQUE_META[cfg.mlTechnique];
+
+    const batchMult = Math.max(0.85, Math.min(1.65, Number(cfg.batchSize) / 32));
     const lrNum = Math.max(1e-5, Math.min(0.05, parseFloat(cfg.learningRate) || 0.0001));
-    const lrFactor = lrNum > 0.005 ? 1.15 : 1.0;
+    const matchedLrPreset = LEARNING_RATE_PRESETS.find(
+      (p) => Math.abs(p.numericLr - lrNum) < p.numericLr * 0.15
+    );
+    const lrFactor = matchedLrPreset ? matchedLrPreset.lossModifier : lrNum > 0.005 ? 1.14 : 1.0;
+    const lrAccBonus = matchedLrPreset ? matchedLrPreset.accBonus : lrNum > 0.005 ? -0.015 : 0;
+    const lrSigmaMult = matchedLrPreset ? matchedLrPreset.sigmaMult : lrNum > 0.005 ? 1.35 : 1.0;
 
     let currentEpoch = 0;
     const maxEpochs = Number(cfg.epochs) || 12;
 
-    let loss = (targetProj.epochHistory[0]?.loss || 2.1) * varMeta.lossPenalty * (isCrossModality ? 1.18 : 1.0);
-    let acc = Math.max(0.32, (targetProj.epochHistory[0]?.accuracy || 0.48) + varMeta.accOffset - (isCrossModality ? 0.06 : 0));
-    let valLoss = loss * 1.12;
-    let valAcc = Math.max(0.28, acc - 0.04);
+    let loss =
+      (targetProj.epochHistory[0]?.loss || 2.1) *
+      varMeta.lossPenalty *
+      typeMeta.lossMult *
+      mlMeta.lossModifier *
+      lrFactor *
+      (isCrossModality ? 1.18 : 1.0);
+    let acc = Math.max(
+      0.34,
+      (targetProj.epochHistory[0]?.accuracy || 0.5) +
+        varMeta.accOffset +
+        typeMeta.accBias +
+        mlMeta.accModifier +
+        lrAccBonus -
+        (isCrossModality ? 0.05 : 0)
+    );
+    let valLoss = loss * 1.11;
+    let valAcc = Math.max(0.3, acc - 0.035);
 
     const targetFinalAcc = Math.min(
-      0.978,
-      Math.max(0.74, (targetProj.epochHistory[targetProj.epochHistory.length - 1]?.accuracy || 0.91) + varMeta.accOffset - (isCrossModality ? 0.035 : 0))
+      0.996,
+      Math.max(
+        0.75,
+        (targetProj.epochHistory[targetProj.epochHistory.length - 1]?.accuracy || 0.93) +
+          varMeta.accOffset +
+          typeMeta.accBias +
+          mlMeta.accModifier +
+          lrAccBonus -
+          (isCrossModality ? 0.03 : 0)
+      )
     );
 
     const interval = window.setInterval(() => {
       currentEpoch += 1;
-      const decay = 0.72 + (isCrossModality ? 0.04 : 0);
-      loss = Math.max(0.06, loss * decay * lrFactor + Math.random() * 0.035 * varMeta.noiseMultiplier);
+      const decay = 0.71 + (isCrossModality ? 0.04 : 0);
+      loss = Math.max(
+        0.045,
+        loss * decay + Math.random() * 0.025 * varMeta.noiseMultiplier * lrSigmaMult
+      );
       acc = Math.min(
         targetFinalAcc,
-        acc + (targetFinalAcc - acc) * 0.36 + (Math.random() - 0.25) * 0.015
+        acc + (targetFinalAcc - acc) * 0.38 + (Math.random() - 0.25) * 0.012
       );
-      valLoss = Math.max(loss * 1.04, valLoss * (decay + 0.025) + Math.random() * 0.045 * varMeta.noiseMultiplier);
-      const gap = Math.max(0.006, 0.014 * varMeta.noiseMultiplier + (isCrossModality ? 0.012 : 0));
-      valAcc = Math.min(targetFinalAcc - gap, acc - gap + (Math.random() - 0.5) * 0.012);
+      valLoss = Math.max(
+        loss * 1.04,
+        valLoss * (decay + 0.02) + Math.random() * 0.035 * varMeta.noiseMultiplier * lrSigmaMult
+      );
+      const gap = Math.max(
+        0.005,
+        0.011 * varMeta.noiseMultiplier + (isCrossModality ? 0.011 : 0)
+      );
+      valAcc = Math.min(
+        targetFinalAcc - gap,
+        acc - gap + (Math.random() - 0.5) * 0.008
+      );
 
-      const sigma = Number((varMeta.sigmaBase * (0.7 + 0.5 * (1 - currentEpoch / maxEpochs))).toFixed(2));
-      const throughput = Math.round(typeMeta.throughputBase * batchMult * (0.94 + Math.random() * 0.12));
+      const sigma = Number(
+        (varMeta.sigmaBase * lrSigmaMult * (0.7 + 0.5 * (1 - currentEpoch / maxEpochs))).toFixed(2)
+      );
+      const encMeta = ENCRYPTION_MECHANISM_META[cfg.encryptionProfile];
+      const throughput = Math.round(
+        typeMeta.throughputBase *
+          progMeta.throughputMultiplier *
+          encMeta.throughputMultiplier *
+          batchMult *
+          (0.95 + Math.random() * 0.1)
+      );
+      const latStats = computeLatencyP95P99(
+        cfg.programmingArch,
+        cfg.dataType,
+        cfg.mlTechnique,
+        cfg.encryptionProfile
+      );
+      const jitterRand = 0.94 + Math.random() * 0.1;
+      const latencyMs = Number((latStats.p95Ms * jitterRand).toFixed(2));
+      const p99LatencyMs = Number((latStats.p99Ms * (0.95 + Math.random() * 0.14)).toFixed(2));
 
       setTrainingEpoch(currentEpoch);
       setTrainingLogs((prev) => [
@@ -1952,7 +2022,11 @@ ${p.code}
           valAcc: Number(valAcc.toFixed(4)),
           sigma,
           throughput,
-          dataTypeLabel: typeMeta.shortLabel
+          latencyMs,
+          p99LatencyMs,
+          dataTypeLabel: typeMeta.shortLabel,
+          progArchLabel: progMeta.shortName,
+          mlTechLabel: mlMeta.shortName
         }
       ]);
 
@@ -1961,13 +2035,9 @@ ${p.code}
         trainingIntervalRef.current = null;
         setIsTraining(false);
       }
-    }, 360);
+    }, 320);
 
     trainingIntervalRef.current = interval;
-  };
-
-  const handleStartTraining = () => {
-    runTrainingSimulation();
   };
 
   const handleLaunchTrainingFromProject = (
@@ -1975,13 +2045,16 @@ ${p.code}
     dataType: SyntheticDataType,
     variant: SyntheticVariant
   ) => {
-    const nextConfig = {
+    const nextConfig: SimConfigState = {
       ...simConfig,
       projectId: project.id,
       architecture: project.techStack.slice(0, 2).join(' + '),
       dataType,
       syntheticVariant: variant,
-      sampleCount: variant === 'scaled_100k' ? 100000 : 25000
+      sampleCount: variant === 'scaled_100k' ? 2410000000 : 1500000000,
+      programmingArch: inferBestProgrammingArch(project),
+      mlTechnique: inferBestMlTechnique(project),
+      learningRate: inferBestLearningRate(project).lrValue
     };
     setSimConfig(nextConfig);
     setActiveTab('training');
@@ -1996,15 +2069,42 @@ ${p.code}
     setChatInput('');
     setChatMessages(prev => [...prev, { sender: 'user', text: userText }]);
     setIsChatLoading(true);
+    const startTime = performance.now();
 
     try {
       const res = await fetch('/api/ai-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userText, useRag: useRagGrounding })
+        body: JSON.stringify({
+          message: userText,
+          useRag: useRagGrounding,
+          searchMode: copilotSearchMode,
+          alpha: 0.55
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Chat failed');
+
+      const elapsed = Math.round(performance.now() - startTime);
+      const promptTok = Math.round(userText.split(/\s+/).length * 1.3);
+      const replyTok = Math.round((data.reply || '').split(/\s+/).length * 1.3);
+
+      setCopilotMonitor(prev => {
+        const totalReqs = prev.totalRequests + 1;
+        const successes = prev.successCount + 1;
+        const newAvg = Math.round(((prev.avgLatencyMs * (totalReqs - 1)) + elapsed) / totalReqs);
+        return {
+          totalRequests: totalReqs,
+          successCount: successes,
+          lastLatencyMs: elapsed,
+          avgLatencyMs: newAvg,
+          totalInputTokens: prev.totalInputTokens + promptTok,
+          totalOutputTokens: prev.totalOutputTokens + replyTok,
+          lastPromptTokens: promptTok,
+          lastCompletionTokens: replyTok
+        };
+      });
+
       setChatMessages(prev => [
         ...prev,
         {
@@ -2013,7 +2113,14 @@ ${p.code}
           citations: Array.isArray(data.citations) ? data.citations : []
         }
       ]);
+      fetchRagStatus();
     } catch (err: any) {
+      const elapsed = Math.round(performance.now() - startTime);
+      setCopilotMonitor(prev => ({
+        ...prev,
+        totalRequests: prev.totalRequests + 1,
+        lastLatencyMs: elapsed
+      }));
       setChatMessages(prev => [
         ...prev,
         {
@@ -2043,10 +2150,10 @@ ${p.code}
         </div>
 
         {/* Vertical Navigation Links */}
-        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+        <nav className="flex-1 px-5 py-6 space-y-2 overflow-y-auto">
           <button 
             onClick={() => setActiveTab('showcase')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'showcase' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'showcase' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
             <span>Research Projects</span>
@@ -2054,15 +2161,15 @@ ${p.code}
 
           <button 
             onClick={() => setActiveTab('repository')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'repository' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'repository' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <Database className="w-4 h-4 shrink-0" />
-            <span>ML Repository</span>
+            <span>ML Case Studies</span>
           </button>
 
           <button 
             onClick={() => setActiveTab('coderepo')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'coderepo' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'coderepo' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <FolderGit2 className="w-4 h-4 shrink-0" />
             <span>Code Repo</span>
@@ -2070,15 +2177,15 @@ ${p.code}
 
           <button 
             onClick={() => setActiveTab('training')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'training' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'training' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <LineChart className="w-4 h-4 shrink-0" />
-            <span>Training Simulator</span>
+            <span>ML Simulator</span>
           </button>
 
           <button 
             onClick={() => setActiveTab('whitepapers')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'whitepapers' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'whitepapers' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <Newspaper className="w-4 h-4 shrink-0" />
             <span>White Papers</span>
@@ -2086,14 +2193,14 @@ ${p.code}
 
           <button 
             onClick={() => setActiveTab('learning')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'learning' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'learning' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <GraduationCap className="w-4 h-4 shrink-0" />
             <span>Learning</span>
           </button>
 
           {/* Archives Section (Project Builder, AI ML Copilot, MLOps Roadmap) */}
-          <div className="pt-3 mt-3 border-t border-slate-200 space-y-1">
+          <div className="pt-4 mt-4 border-t border-slate-200 space-y-2 pb-4">
             <button
               onClick={() => {
                 if (activeTab === 'archives') {
@@ -2105,7 +2212,7 @@ ${p.code}
               }}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeTab === 'archives'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold'
+                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold'
                   : (activeTab === 'builder' || activeTab === 'copilot' || activeTab === 'roadmap')
                     ? 'bg-slate-100 text-slate-900 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -2126,10 +2233,10 @@ ${p.code}
             </button>
 
             {archivesOpen && (
-              <div className="pl-3 space-y-1">
+              <div className="pl-3 pr-1 space-y-1.5 pt-1.5 pb-1">
                 <button 
                   onClick={() => setActiveTab('builder')}
-                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
                 >
                   <Wand2 className="w-3.5 h-3.5 shrink-0" />
                   <span>Project Builder Wizard</span>
@@ -2137,7 +2244,7 @@ ${p.code}
 
                 <button 
                   onClick={() => setActiveTab('copilot')}
-                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeTab === 'copilot' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeTab === 'copilot' ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
                 >
                   <MessageSquareCode className="w-3.5 h-3.5 shrink-0" />
                   <span>AI ML Copilot</span>
@@ -2145,7 +2252,7 @@ ${p.code}
 
                 <button 
                   onClick={() => setActiveTab('roadmap')}
-                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeTab === 'roadmap' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all ${activeTab === 'roadmap' ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
                 >
                   <Workflow className="w-3.5 h-3.5 shrink-0" />
                   <span>MLOps Roadmap</span>
@@ -2183,13 +2290,15 @@ ${p.code}
                     ? 'MLOps Roadmap'
                     : activeTab === 'coderepo'
                       ? 'Code Repo'
-                      : activeTab === 'whitepapers'
-                        ? 'White Papers'
-                        : activeTab === 'learning'
-                          ? 'Learning'
-                          : activeTab === 'archives'
-                            ? 'Archives'
-                            : activeTab.replace('-', ' ')}
+                      : activeTab === 'training'
+                        ? 'ML Simulator'
+                        : activeTab === 'whitepapers'
+                          ? 'White Papers'
+                          : activeTab === 'learning'
+                            ? 'Learning'
+                            : activeTab === 'archives'
+                              ? 'Archives'
+                              : activeTab.replace('-', ' ')}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -2209,11 +2318,10 @@ ${p.code}
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="max-w-4xl">
                     <div className="flex items-center gap-2 text-xs font-mono text-indigo-700 font-semibold mb-2">
-                      <span className="bg-indigo-100 px-2 py-0.5 rounded text-indigo-800 border border-indigo-200">[ScholarML Enterprise Edition]</span>
                       <span>Production AI, Cybersecurity &amp; UIDAI DPI Research Engine</span>
                     </div>
                     <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2 tracking-tight">
-                      Research-Grade &amp; Flagship AI/ML Projects
+                      Flagship AI/ML Research &amp; Cases studies
                     </h1>
                     <p className="text-slate-600 text-base leading-relaxed">
                       Production-ready reference implementations featuring Training Convergence Charts, Sample Data Distributions, Architecture Topologies, and Rust-accelerated pipelines.
@@ -2290,15 +2398,9 @@ ${p.code}
               <div className="bg-slate-100 hover:bg-slate-200/80 p-6 rounded-2xl border border-slate-300 shadow-xs transition-all duration-200">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-rose-900 mb-2 font-medium">
-                      <span className="bg-rose-100 px-2 py-0.5 rounded text-rose-900 font-bold border border-rose-200">[Unified ML Project Repository]</span>
-                      <span>Google Scholar Spec Benchmark Collection</span>
-                      <span>·</span>
-                      <span className="text-blue-900 font-semibold">{ALL_REPOSITORY_PROJECTS.length} Imported Implementations</span>
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Curated Machine Learning & AI Repository</h2>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Machine Learning & AI Case Studies Repository</h2>
                     <p className="text-slate-700 text-sm mt-1 max-w-4xl leading-relaxed">
-                      End-to-end ML &amp; research-grade architectures imported from arXiv SOTA papers, LabML.ai, Stanford AI (CS224n/CS231n), Analytics Vidhya, GeeksforGeeks, AI Handbook, AmanXai, and DataCamp—complete with convergence &amp; ±σ deviation graphs, model comparisons, and annotated executable code.
+                      End-to-end ML &amp; research-grade architectures complete with convergence &amp; ±σ deviation graphs, model comparisons, and annotated executable code.
                     </p>
                   </div>
                 </div>
@@ -2437,6 +2539,27 @@ ${p.code}
                           </div>
                         </div>
 
+                        {/* CapEx & 20-Yr YoY OpEx Financial Preview */}
+                        {(() => {
+                          const econ = computeProjectEconomics(proj);
+                          return (
+                            <div className="grid grid-cols-3 gap-1.5 bg-white p-2 rounded-xl border border-slate-300 text-[11px] font-mono tabular-nums">
+                              <div>
+                                <span className="text-slate-500 block text-[9.5px]">Total CapEx</span>
+                                <span className="text-blue-950 font-bold">{formatInrCompact(econ.totalCapExUsd)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[9.5px]">OpEx YoY (Y1)</span>
+                                <span className="text-emerald-900 font-bold">{formatInrCompact(econ.opExYear1Usd)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[9.5px]">20-Yr OpEx</span>
+                                <span className="text-indigo-950 font-bold">{formatInrCompact(econ.totalOpEx20YrUsd)}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="flex flex-wrap gap-1.5">
                           {proj.techStack.map((tech, i) => (
                             <span key={i} className="text-xs px-2 py-0.5 rounded font-mono bg-slate-200 text-slate-800 border border-slate-300">
@@ -2510,7 +2633,16 @@ ${p.code}
                         className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs"
                       >
                         <FolderGit2 className="w-4 h-4 text-blue-900" />
-                        <span>View Code Repo Structure</span>
+                        <span>Code Repo</span>
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          await downloadProjectGitZip(selectedRepoProject);
+                        }}
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download Git Repo (.zip)</span>
                       </button>
                       <button 
                         onClick={() => setWhitePaperModalProject(selectedRepoProject)}
@@ -2543,6 +2675,9 @@ ${p.code}
 
                   {/* TRAINING LOSS, ACCURACY, DEVIATION, EFFICIENCY & MODEL COMPARISON GRAPHS */}
                   <ProjectTelemetryCharts project={selectedRepoProject} />
+
+                  {/* TOTAL CAPEX, 20-YEAR YOY OPEX & OPERATIONAL COST ARCHITECTURE */}
+                  <ProjectEconomicsPanel project={selectedRepoProject} />
 
                   {/* SYNTHETIC DATASET & SELECTED DATA TYPE TRAINING LAUNCHER */}
                   <ProjectSyntheticDatasetPanel
@@ -2639,6 +2774,27 @@ ${p.code}
                         </div>
                       </div>
 
+                      {/* CapEx & 20-Yr YoY OpEx Financial Preview */}
+                      {(() => {
+                        const econ = computeProjectEconomics(proj);
+                        return (
+                          <div className="grid grid-cols-3 gap-1.5 bg-white p-2 rounded-xl border border-slate-300 text-[11px] font-mono tabular-nums">
+                            <div>
+                              <span className="text-slate-500 block text-[9.5px]">Total CapEx</span>
+                              <span className="text-blue-950 font-bold">{formatInrCompact(econ.totalCapExUsd)}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[9.5px]">OpEx YoY (Y1)</span>
+                              <span className="text-emerald-900 font-bold">{formatInrCompact(econ.opExYear1Usd)}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[9.5px]">20-Yr OpEx</span>
+                              <span className="text-indigo-950 font-bold">{formatInrCompact(econ.totalOpEx20YrUsd)}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex flex-wrap gap-1.5">
                         {proj.techStack.slice(0, 3).map((tech, i) => (
                           <span key={i} className={`text-xs px-2 py-0.5 rounded font-mono ${tech === 'Rust' ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold' : 'bg-slate-200 text-slate-800 border border-slate-300'}`}>
@@ -2700,7 +2856,16 @@ ${p.code}
                         className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs"
                       >
                         <FolderGit2 className="w-4 h-4 text-blue-900" />
-                        <span>View Code Repo Structure</span>
+                        <span>Code Repo</span>
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          await downloadProjectGitZip(selectedProject);
+                        }}
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download Git Repo (.zip)</span>
                       </button>
                       <button 
                         onClick={() => setWhitePaperModalProject(selectedProject)}
@@ -2733,6 +2898,9 @@ ${p.code}
 
                   {/* TRAINING LOSS, ACCURACY, DEVIATION, EFFICIENCY & MODEL COMPARISON GRAPHS */}
                   <ProjectTelemetryCharts project={selectedProject} />
+
+                  {/* TOTAL CAPEX, 20-YEAR YOY OPEX & OPERATIONAL COST ARCHITECTURE */}
+                  <ProjectEconomicsPanel project={selectedProject} />
 
                   {/* SYNTHETIC DATASET & SELECTED DATA TYPE TRAINING LAUNCHER */}
                   <ProjectSyntheticDatasetPanel
@@ -2957,393 +3125,20 @@ ${p.code}
             </div>
           )}
 
-          {/* TAB 3: TRAINING SIMULATOR */}
+          {/* TAB 3: ML TRAINING SIMULATOR */}
           {activeTab === 'training' && (
-            <div className="space-y-8">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-mono text-rose-900 mb-1 font-semibold">
-                  <span className="bg-rose-100 px-2 py-0.5 rounded text-rose-900 font-bold border border-rose-200">[Empirical Verification · Synthetic Modality Runner]</span>
-                  <span>Project-Linked Hyperparameter &amp; Data-Type Training Simulator</span>
-                </div>
-                <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Model Training &amp; Synthetic Data-Type Simulator</h2>
-                <p className="text-slate-600 text-sm mt-1">Select any Flagship or Repository project, choose its synthetic dataset profile and input data type, and run simulated training epochs.</p>
-              </div>
-
-              {(() => {
-                const activeSimProject =
-                  allProjectsCatalog.find((p) => p.id === simConfig.projectId) || FLAGSHIP_PROJECTS[0];
-                const activeProfile = getSyntheticDatasetProfile(
-                  activeSimProject,
-                  simConfig.dataType,
-                  simConfig.syntheticVariant
-                );
-                const previewSamples = generateSyntheticSamples(
-                  activeSimProject,
-                  simConfig.dataType,
-                  simConfig.syntheticVariant,
-                  3,
-                  simConfig.seed
-                );
-                const isCrossModality = simConfig.dataType !== activeProfile.defaultDataType;
-
-                return (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    {/* Simulator Controls */}
-                    <div className="lg:col-span-4 bg-slate-100 hover:bg-slate-200/80 border border-slate-300 rounded-2xl p-6 space-y-4 transition-all duration-200 shadow-xs">
-                      <h3 className="text-base font-bold text-slate-900 pb-3 border-b border-slate-300">Project, Data Type &amp; Hyperparameters</h3>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Target Project</label>
-                        <select
-                          value={simConfig.projectId}
-                          onChange={(e) => {
-                            const nextProj =
-                              allProjectsCatalog.find((p) => p.id === e.target.value) || FLAGSHIP_PROJECTS[0];
-                            setSimConfig({
-                              ...simConfig,
-                              projectId: nextProj.id,
-                              architecture: nextProj.techStack.slice(0, 2).join(' + '),
-                              dataType: inferProjectDataType(nextProj)
-                            });
-                          }}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-900 shadow-xs"
-                        >
-                          <optgroup label="Research Projects (Flagship + Starred)">
-                            {researchProjects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {starredRepoIds.includes(p.id) ? '★ ' : ''}{p.title}
-                              </option>
-                            ))}
-                          </optgroup>
-                          <optgroup label="ML Repository Projects">
-                            {nonStarredRepoProjects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                [{p.sourceName || 'Repo'}] {p.title}
-                              </option>
-                            ))}
-                          </optgroup>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                          Selected Data Type {isCrossModality ? '(Cross-Modality)' : '(Project Native)'}
-                        </label>
-                        <select
-                          value={simConfig.dataType}
-                          onChange={(e) =>
-                            setSimConfig({ ...simConfig, dataType: e.target.value as SyntheticDataType })
-                          }
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-900 shadow-xs"
-                        >
-                          {(Object.keys(SYNTHETIC_DATA_TYPE_META) as SyntheticDataType[]).map((dt) => (
-                            <option key={dt} value={dt}>
-                              {SYNTHETIC_DATA_TYPE_META[dt].label}
-                              {dt === activeProfile.defaultDataType ? ' ★ Native' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Synthetic Dataset Distribution</label>
-                        <select
-                          value={simConfig.syntheticVariant}
-                          onChange={(e) => {
-                            const variant = e.target.value as SyntheticVariant;
-                            setSimConfig({
-                              ...simConfig,
-                              syntheticVariant: variant,
-                              sampleCount: variant === 'scaled_100k' ? 100000 : 25000
-                            });
-                          }}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-900 shadow-xs"
-                        >
-                          {(Object.keys(SYNTHETIC_VARIANT_META) as SyntheticVariant[]).map((v) => (
-                            <option key={v} value={v}>
-                              {SYNTHETIC_VARIANT_META[v].label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Synthetic Samples</label>
-                          <select
-                            value={simConfig.sampleCount}
-                            onChange={(e) => setSimConfig({ ...simConfig, sampleCount: Number(e.target.value) })}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-900 shadow-xs"
-                          >
-                            <option value={2500}>2,500</option>
-                            <option value={10000}>10,000</option>
-                            <option value={25000}>25,000</option>
-                            <option value={100000}>100,000</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">PRNG Seed</label>
-                          <input
-                            type="number"
-                            value={simConfig.seed}
-                            onChange={(e) => setSimConfig({ ...simConfig, seed: Number(e.target.value) || 42 })}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-900 shadow-xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Model Architecture</label>
-                        <input
-                          type="text"
-                          value={simConfig.architecture}
-                          onChange={(e) => setSimConfig({ ...simConfig, architecture: e.target.value })}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:border-blue-900 shadow-xs"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Optimizer</label>
-                          <select
-                            value={simConfig.optimizer}
-                            onChange={e => setSimConfig({ ...simConfig, optimizer: e.target.value })}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-900 shadow-xs"
-                          >
-                            <option value="AdamW">AdamW</option>
-                            <option value="SGD">SGD Momentum</option>
-                            <option value="RMSprop">RMSprop</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Batch Size</label>
-                          <select
-                            value={simConfig.batchSize}
-                            onChange={e => setSimConfig({ ...simConfig, batchSize: e.target.value })}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-900 shadow-xs"
-                          >
-                            <option value="8">8</option>
-                            <option value="16">16</option>
-                            <option value="32">32</option>
-                            <option value="64">64</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 items-center">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Learning Rate</label>
-                          <input
-                            type="text"
-                            value={simConfig.learningRate}
-                            onChange={e => setSimConfig({ ...simConfig, learningRate: e.target.value })}
-                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-900 shadow-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Epochs ({simConfig.epochs})</label>
-                          <input
-                            type="range"
-                            min={5}
-                            max={25}
-                            step={5}
-                            value={simConfig.epochs}
-                            onChange={e => setSimConfig({ ...simConfig, epochs: Number(e.target.value) })}
-                            className="w-full accent-blue-900"
-                          />
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={handleStartTraining}
-                        disabled={isTraining}
-                        className="w-full py-3 bg-blue-900 hover:bg-blue-800 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm"
-                      >
-                        {isTraining ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                            <span>Training Epoch {trainingEpoch}/{simConfig.epochs}...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-4 h-4" />
-                            <span>Train on {SYNTHETIC_DATA_TYPE_META[simConfig.dataType].shortLabel}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Training Logs, Active Synthetic Batch & Curve Visualizer */}
-                    <div className="lg:col-span-8 space-y-6">
-                      {/* Active Synthetic Data Batch Spec Card */}
-                      <div className="rounded-2xl bg-slate-100 border border-slate-300 p-5 space-y-3 shadow-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
-                              <span className="bg-rose-100 text-rose-900 px-2 py-0.5 rounded font-bold border border-rose-200">
-                                Active Synthetic Dataset
-                              </span>
-                              <span className="text-blue-900 font-semibold">{activeProfile.tensorShape}</span>
-                              <span>·</span>
-                              <span className="text-emerald-900 font-semibold">Loss: {activeProfile.recommendedLoss}</span>
-                            </div>
-                            <h4 className="text-sm font-bold text-slate-900 mt-1">{activeProfile.datasetName} ({simConfig.sampleCount.toLocaleString()} records)</h4>
-                          </div>
-                          {isCrossModality && (
-                            <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-mono font-semibold">
-                              Cross-Modality Adapter Active
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="overflow-x-auto bg-white rounded-xl border border-slate-300">
-                          <table className="w-full text-left border-collapse text-[11px] font-mono">
-                            <thead>
-                              <tr className="bg-slate-200/60 border-b border-slate-300 text-slate-700">
-                                {activeProfile.columns.map((c) => (
-                                  <th key={c.name} className="py-1.5 px-3 font-semibold whitespace-nowrap">{c.name}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200">
-                              {previewSamples.map((row, idx) => (
-                                <tr key={idx}>
-                                  {activeProfile.columns.map((c) => (
-                                    <td key={c.name} className={`py-1.5 px-3 whitespace-nowrap ${c.role === 'target' ? 'text-emerald-900 font-bold' : 'text-slate-700'}`}>
-                                      {String(row[c.name])}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* KPI Readout Cards */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="p-4 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors shadow-xs">
-                          <span className="text-xs text-slate-600 block mb-1 font-mono">Current Epoch</span>
-                          <span className="text-2xl font-bold font-mono text-slate-900">{trainingEpoch} / {simConfig.epochs}</span>
-                        </div>
-
-                        <div className="p-4 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors shadow-xs">
-                          <span className="text-xs text-slate-600 block mb-1 font-mono">Training Loss</span>
-                          <span className="text-2xl font-bold font-mono text-blue-900">
-                            {trainingLogs.length > 0 ? trainingLogs[trainingLogs.length - 1].loss : '0.0000'}
-                          </span>
-                        </div>
-
-                        <div className="p-4 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors shadow-xs">
-                          <span className="text-xs text-slate-600 block mb-1 font-mono">Train Acc (±σ)</span>
-                          <span className="text-xl font-bold font-mono text-emerald-900">
-                            {trainingLogs.length > 0
-                              ? `${(trainingLogs[trainingLogs.length - 1].accuracy * 100).toFixed(1)}% ±${trainingLogs[trainingLogs.length - 1].sigma}%`
-                              : '0.0%'}
-                          </span>
-                        </div>
-
-                        <div className="p-4 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors shadow-xs">
-                          <span className="text-xs text-slate-600 block mb-1 font-mono">Throughput</span>
-                          <span className="text-xl font-bold font-mono text-rose-900">
-                            {trainingLogs.length > 0 ? `${trainingLogs[trainingLogs.length - 1].throughput.toLocaleString()}/s` : '—'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Live Training SVG Convergence Plot */}
-                      {trainingLogs.length > 1 && (
-                        <div className="rounded-2xl bg-slate-100 border border-slate-300 p-5 shadow-xs space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-xs font-bold text-slate-900">Live Convergence Curve ({SYNTHETIC_DATA_TYPE_META[simConfig.dataType].shortLabel})</span>
-                            <div className="flex items-center gap-4 text-[11px] font-mono">
-                              <span className="text-blue-900 font-semibold">— Train Loss</span>
-                              <span className="text-emerald-900 font-semibold">— Train Acc</span>
-                              <span className="text-rose-900 font-semibold">-- Val Acc</span>
-                            </div>
-                          </div>
-                          <svg viewBox="0 0 500 130" className="w-full h-36 bg-white rounded-xl border border-slate-200">
-                            <line x1="35" y1="20" x2="480" y2="20" stroke="#e2e8f0" strokeDasharray="3 3" />
-                            <line x1="35" y1="65" x2="480" y2="65" stroke="#e2e8f0" strokeDasharray="3 3" />
-                            <line x1="35" y1="110" x2="480" y2="110" stroke="#cbd5e1" />
-                            {(() => {
-                              const maxL = Math.max(1.5, ...trainingLogs.map((l) => l.loss * 1.05));
-                              const stepX = 440 / Math.max(1, trainingLogs.length - 1);
-                              const lossPts = trainingLogs
-                                .map((l, i) => `${38 + i * stepX},${108 - (l.loss / maxL) * 86}`)
-                                .join(' ');
-                              const accPts = trainingLogs
-                                .map((l, i) => `${38 + i * stepX},${108 - l.accuracy * 86}`)
-                                .join(' ');
-                              const valPts = trainingLogs
-                                .map((l, i) => `${38 + i * stepX},${108 - l.valAcc * 86}`)
-                                .join(' ');
-                              return (
-                                <>
-                                  <polyline fill="none" stroke="#1e3a8a" strokeWidth="2.5" points={lossPts} />
-                                  <polyline fill="none" stroke="#065f46" strokeWidth="2.5" points={accPts} />
-                                  <polyline fill="none" stroke="#881337" strokeWidth="2" strokeDasharray="5 3" points={valPts} />
-                                </>
-                              );
-                            })()}
-                          </svg>
-                        </div>
-                      )}
-
-                      {/* Training Table Logs */}
-                      <div className="rounded-2xl bg-slate-100 border border-slate-300 overflow-hidden shadow-xs">
-                        <div className="px-6 py-4 border-b border-slate-300 bg-slate-200/90 flex flex-wrap items-center justify-between gap-2">
-                          <h3 className="text-sm font-bold text-slate-900">Epoch Metrics Log</h3>
-                          <span className="text-xs font-mono text-blue-900 font-semibold">
-                            {simConfig.architecture} · {SYNTHETIC_DATA_TYPE_META[simConfig.dataType].shortLabel}
-                          </span>
-                        </div>
-                        <div className="overflow-x-auto max-h-80">
-                          <table className="w-full text-left border-collapse text-xs font-mono">
-                            <thead>
-                              <tr className="bg-slate-200/50 text-slate-700 border-b border-slate-300">
-                                <th className="py-3 px-4 font-semibold">Epoch</th>
-                                <th className="py-3 px-4 font-semibold">Data Type</th>
-                                <th className="py-3 px-4 font-semibold">Train Loss</th>
-                                <th className="py-3 px-4 font-semibold">Train Acc</th>
-                                <th className="py-3 px-4 font-semibold">Val Loss</th>
-                                <th className="py-3 px-4 font-semibold">Val Acc</th>
-                                <th className="py-3 px-4 font-semibold">±σ Dev</th>
-                                <th className="py-3 px-4 font-semibold">Throughput</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200">
-                              {trainingLogs.length === 0 ? (
-                                <tr>
-                                  <td colSpan={8} className="py-8 text-center text-slate-600">
-                                    Click "Train on {SYNTHETIC_DATA_TYPE_META[simConfig.dataType].shortLabel}" to run simulated epochs on the selected synthetic dataset.
-                                  </td>
-                                </tr>
-                              ) : (
-                                trainingLogs.map((log, i) => (
-                                  <tr key={i} className="hover:bg-slate-200/80 transition-colors">
-                                    <td className="py-2.5 px-4 text-slate-900 font-bold">{log.epoch}</td>
-                                    <td className="py-2.5 px-4 text-slate-700">{log.dataTypeLabel}</td>
-                                    <td className="py-2.5 px-4 text-blue-900 font-semibold tabular-nums">{log.loss}</td>
-                                    <td className="py-2.5 px-4 text-emerald-900 font-semibold tabular-nums">{(log.accuracy * 100).toFixed(2)}%</td>
-                                    <td className="py-2.5 px-4 text-slate-700 tabular-nums">{log.valLoss}</td>
-                                    <td className="py-2.5 px-4 text-rose-900 font-semibold tabular-nums">{(log.valAcc * 100).toFixed(2)}%</td>
-                                    <td className="py-2.5 px-4 text-slate-700 tabular-nums">±{log.sigma}%</td>
-                                    <td className="py-2.5 px-4 text-blue-900 tabular-nums">{log.throughput.toLocaleString()}/s</td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+            <MLTrainingSimulatorTab
+              allProjects={allProjectsCatalog}
+              researchProjects={researchProjects}
+              repoProjects={nonStarredRepoProjects}
+              starredRepoIds={starredRepoIds}
+              simConfig={simConfig}
+              setSimConfig={setSimConfig}
+              isTraining={isTraining}
+              trainingEpoch={trainingEpoch}
+              trainingLogs={trainingLogs}
+              onStartTraining={runTrainingSimulation}
+            />
           )}
 
           {/* TAB 4: AI ML COPILOT CHAT */}
@@ -3373,6 +3168,45 @@ ${p.code}
                 </div>
               </div>
 
+              {/* Real-Time Copilot Monitor Dashboard Overlay */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white border border-slate-300 rounded-xl p-4 shadow-xs">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">API Latency</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-bold text-slate-900">{copilotMonitor.lastLatencyMs} ms</span>
+                    <span className="text-xs text-blue-900 font-semibold">Avg: {copilotMonitor.avgLatencyMs} ms</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Token Consumption (Prompt)</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-bold text-emerald-900">{copilotMonitor.lastPromptTokens} in / {copilotMonitor.lastCompletionTokens} out</span>
+                    <span className="text-xs text-slate-600">Total: {copilotMonitor.totalInputTokens + copilotMonitor.totalOutputTokens}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Request Success Rate</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-bold text-emerald-800">
+                      {copilotMonitor.totalRequests > 0
+                        ? `${Math.round((copilotMonitor.successCount / copilotMonitor.totalRequests) * 100)}%`
+                        : '100%'}
+                    </span>
+                    <span className="text-xs text-slate-600">{copilotMonitor.successCount}/{copilotMonitor.totalRequests} OK</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Active Endpoint / Model</span>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-xs font-bold text-indigo-900 truncate">Gemini 4 Hydrogen</span>
+                    <span className="text-[10px] text-emerald-700 font-bold">Online</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="rounded-2xl bg-slate-100 border border-slate-300 flex flex-col h-[620px] overflow-hidden shadow-xs">
                 <div className="bg-slate-200/90 px-6 py-3.5 border-b border-slate-300 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -3381,15 +3215,26 @@ ${p.code}
                       Gemini RAG Copilot · FAISS IndexFlatIP ({ragStatus?.totalVectors || 0} vectors across {ragStatus?.totalDocuments || 0} docs)
                     </span>
                   </div>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={useRagGrounding}
-                      onChange={(e) => setUseRagGrounding(e.target.checked)}
-                      className="rounded border-slate-400 text-blue-900 focus:ring-blue-900"
-                    />
-                    <span>Use FAISS Vector Retrieval</span>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={copilotSearchMode}
+                      onChange={(e) => setCopilotSearchMode(e.target.value as 'hybrid' | 'dense' | 'bm25')}
+                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-slate-800 focus:outline-none focus:border-blue-900"
+                    >
+                      <option value="hybrid">Hybrid (Dense + BM25 RRF)</option>
+                      <option value="dense">Dense Vector Only</option>
+                      <option value="bm25">BM25 Sparse Only</option>
+                    </select>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={useRagGrounding}
+                        onChange={(e) => setUseRagGrounding(e.target.checked)}
+                        className="rounded border-slate-400 text-blue-900 focus:ring-blue-900"
+                      />
+                      <span>Use Hybrid RAG Retrieval</span>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Chat Messages */}
@@ -3407,17 +3252,32 @@ ${p.code}
                           <div className="bg-slate-100 border border-slate-300 rounded-xl p-3 space-y-2">
                             <div className="text-[11px] font-mono font-bold text-rose-900 flex items-center gap-1.5">
                               <Database className="w-3.5 h-3.5" />
-                              <span>Retrieved FAISS Context Citations ({msg.citations.length})</span>
+                              <span>Retrieved Hybrid Context Citations ({msg.citations.length})</span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                               {msg.citations.map((cit, cIdx) => (
                                 <div key={`${cit.docId}-${cit.chunkIndex}`} className="bg-white p-2.5 rounded-lg border border-slate-300 text-[11px] space-y-1">
                                   <div className="flex items-center justify-between gap-2 font-mono">
                                     <span className="font-bold text-blue-900 truncate">[Citation {cIdx + 1}] {cit.docTitle}</span>
-                                    <span className="text-emerald-900 font-semibold shrink-0">sim={cit.score}</span>
+                                    <span className="text-emerald-900 font-semibold shrink-0">score={cit.score}</span>
                                   </div>
-                                  <div className="text-[10px] font-mono text-slate-500">Chunk #{cit.chunkIndex}</div>
+                                  <div className="text-[10px] font-mono text-slate-500 flex flex-wrap items-center gap-1.5">
+                                    <span>Chunk #{cit.chunkIndex}</span>
+                                    <span>·</span>
+                                    <span>Dense={cit.denseScore ?? cit.score}</span>
+                                    <span>·</span>
+                                    <span>BM25={cit.bm25Score ?? 0}</span>
+                                  </div>
                                   <p className="text-slate-700 line-clamp-3 leading-snug">{cit.snippet}</p>
+                                  {cit.matchedTerms && cit.matchedTerms.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 pt-0.5">
+                                      {cit.matchedTerms.slice(0, 4).map((t) => (
+                                        <span key={t} className="text-[9px] font-mono px-1 rounded bg-amber-100 text-amber-900">
+                                          {t}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -3585,6 +3445,126 @@ ${p.code}
                   </div>
                 </button>
               </div>
+
+              {/* UIDAI Biometric Security & DPI Architecture Specification */}
+              <div className="mt-10 bg-white border border-slate-300 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-900">
+                      <ShieldCheck className="w-6 h-6 text-blue-900" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-mono font-bold text-blue-900 uppercase">UIDAI National DPI Specification</div>
+                      <h3 className="text-xl font-bold text-slate-900">Scholarly Architecture & Biometric Verification Standard</h3>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-mono font-semibold">
+                    CIDR Specification · 5-Pillar Standard
+                  </span>
+                </div>
+
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  Formal engineering specification governing how external authentication and payment systems interact with UIDAI infrastructure under strict authoritative, cryptographic, biometric, privacy, and SLA constraints:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {/* Pillar 1 */}
+                  <div className="bg-slate-50 border border-slate-300 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-600">
+                        <span className="font-bold text-blue-900">PILLAR 01</span>
+                        <span className="bg-blue-50 text-blue-900 border border-blue-200 px-2 py-0.5 rounded font-semibold">Authoritative</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm">Central Identities Data Repository (CIDR)</h4>
+                      <p className="text-xs text-slate-700 leading-relaxed">
+                        CIDR serves as the single immutable root of truth for demographic and biometric records. All edge captures originate from cryptographically certified L0/L1 Registered Devices.
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-1">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#CIDR</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#L1-RegisteredDevice</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#RootOfTrust</span>
+                    </div>
+                  </div>
+
+                  {/* Pillar 2 */}
+                  <div className="bg-slate-50 border border-slate-300 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-600">
+                        <span className="font-bold text-rose-900">PILLAR 02</span>
+                        <span className="bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded font-semibold">Data in Transit</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm">Hardware Enclaves &amp; Post-Quantum mTLS 1.3</h4>
+                      <p className="text-xs text-slate-700 leading-relaxed">
+                        PID payloads are envelope-encrypted at edge capture devices via Hybrid ML-KEM-1024 + AES-256-GCM over mTLS 1.3 / WireGuard 0-RTT tunnels and unwrapped exclusively inside FIPS 140-3 Level 3 HSMs &amp; AMD SEV-SNP enclaves.
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-1">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#ML-KEM-1024</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#mTLS-1.3</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#FIPS-140-3</span>
+                    </div>
+                  </div>
+
+                  {/* Pillar 3 */}
+                  <div className="bg-slate-50 border border-slate-300 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-600">
+                        <span className="font-bold text-emerald-900">PILLAR 03</span>
+                        <span className="bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded font-semibold">Accurate</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm">Minutiae &amp; Normalized IrisCode Matching</h4>
+                      <p className="text-xs text-slate-700 leading-relaxed">
+                        Fuzzy biometric matching evaluates fingerprint minutiae constellation vectors and Normalized IrisCode Hamming distance (&lt; 0.32 threshold) across 1.50B–2.41B galleries to suppress false error rates.
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-1">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#HammingDistance</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#MinutiaeMatching</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#ISO-30107-PAD</span>
+                    </div>
+                  </div>
+
+                  {/* Pillar 4 */}
+                  <div className="bg-slate-50 border border-slate-300 rounded-xl p-5 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-600">
+                        <span className="font-bold text-indigo-900">PILLAR 04</span>
+                        <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded font-semibold">Data at Rest</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm">VID Tokenization &amp; AES-256-XTS Data Vaults</h4>
+                      <p className="text-xs text-slate-700 leading-relaxed">
+                        Raw IDs are abstracted via NIST FF3-1 Format-Preserving &amp; 16-digit VID tokens. Shards at rest are encrypted using AES-256-XTS / AES-256-GCM-SIV with Argon2id key derivation and 90-day KMS rotation over the 20-year lifecycle.
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-1">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#AES-256-XTS</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#FF3-1-FPE</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#DataVault</span>
+                    </div>
+                  </div>
+
+                  {/* Pillar 5 */}
+                  <div className="bg-slate-50 border border-slate-300 rounded-xl p-5 space-y-3 flex flex-col justify-between md:col-span-2 lg:col-span-2">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-600">
+                        <span className="font-bold text-amber-900">PILLAR 05</span>
+                        <span className="bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded font-semibold">Timely / SLA</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm">Sub-200ms In-Memory Matching & Asynchronous Routing</h4>
+                      <p className="text-xs text-slate-700 leading-relaxed">
+                        CIDR achieves sub-200ms end-to-end latency SLAs through distributed lock-free Rust/C++ indexing, non-blocking asynchronous gateway routing, and circuit breakers for AEPS micro-ATM rails.
+                      </p>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 flex flex-wrap gap-1">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#Sub200msSLA</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#LockFreeRust</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#AsyncRouting</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-300 text-slate-700">#AEPS-Rails</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -3602,285 +3582,89 @@ ${p.code}
         </main>
         {/* Footer */}
         <footer className="border-t border-slate-200 py-6 px-8 text-center text-xs text-slate-600 bg-white shadow-inner">
-          AI/ML Project Architect & Studio · Built with Google AI Studio & @google/genai
+          AI/ML Project Architect & Studio
         </footer>
       </div>
 
-      {/* TECHNICAL WHITE PAPER MODAL (GOOGLE SCHOLAR SPECIFICATION) */}
+      {/* TECHNICAL WHITE PAPER MODAL (GOOGLE SCHOLAR SPECIFICATION STANDARD) */}
       {whitePaperModalProject && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-300 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-6 md:p-10 relative shadow-2xl font-sans">
-            <button 
-              onClick={() => setWhitePaperModalProject(null)}
-              className="absolute top-6 right-6 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors border border-slate-300 shadow-xs"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {/* Google Scholar Spec Academic Header */}
-            <div className="mb-6 pb-6 border-b border-slate-200">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-rose-900 mb-2 font-medium">
-                <span className="bg-rose-100 px-2 py-0.5 rounded text-rose-900 font-bold border border-rose-200">[Google Scholar Research Preprint]</span>
-                <span className="text-blue-900 font-semibold">{whitePaperModalProject.domain}</span>
-                <span>·</span>
-                <span className="text-slate-600">Benchmark DOI: 10.1145/datacamp-ml-spec.2024</span>
-              </div>
-              <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 font-serif tracking-tight mt-1 mb-2">
-                Technical White Paper & Engineering Specification
-              </h2>
-              <h3 className="text-base text-blue-900 font-semibold mb-3">
-                {whitePaperModalProject.title}
-              </h3>
-              
-              <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-slate-700 bg-slate-100 p-3 rounded-xl border border-slate-300 shadow-xs">
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Training Loss</span>
-                  <span className="text-blue-900 font-bold">{whitePaperModalProject.trainingLoss}</span>
-                </div>
-                <div className="h-6 w-px bg-slate-300" />
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Training Accuracy</span>
-                  <span className="text-emerald-900 font-bold">{whitePaperModalProject.trainingAccuracy}</span>
-                </div>
-                <div className="h-6 w-px bg-slate-300" />
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Target Metrics</span>
-                  <span className="text-rose-900 font-bold">{whitePaperModalProject.metrics}</span>
-                </div>
-                <div className="h-6 w-px bg-slate-300" />
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Inference Latency</span>
-                  <span className="text-slate-900 font-bold">{whitePaperModalProject.performanceIndicators.latency}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Document Sections in Silver Grey Boxes with Hover Effect */}
-            <div className="space-y-6 text-sm leading-relaxed">
-              <div>
-                <h4 className="text-rose-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-900" />
-                  <span>1. Problem Statement (Google Scholar Spec)</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.problem}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-blue-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-900" />
-                  <span>2. Breaking Ground & Innovation</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.breakingGround}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-emerald-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-900" />
-                  <span>3. Project Scope & Functional Requirements</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.whitePaper.scope}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-blue-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-900" />
-                  <span>4. Core Methodology & Data Pipeline</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.whitePaper.methodology}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-rose-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-900" />
-                  <span>5. System Architecture & Topology</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.whitePaper.architecture}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-emerald-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-900" />
-                  <span>6. Empirical Benchmarks & Training Convergence ({whitePaperModalProject.trainingLoss}, {whitePaperModalProject.trainingAccuracy})</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.whitePaper.benchmarks}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-slate-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-900" />
-                  <span>7. Production MLOps & Scalability Considerations</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {whitePaperModalProject.whitePaper.productionConsiderations}
-                </div>
-              </div>
-
-              {/* 8. Google Scholar Citation Format */}
-              <div className="pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-rose-900 font-bold flex items-center gap-2 text-sm font-mono">
-                    <BookOpen className="w-4 h-4 text-rose-900" />
-                    <span>Google Scholar BibTeX Citation</span>
-                  </h4>
-                  <button
-                    onClick={() => handleCopyCitation(whitePaperModalProject)}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold rounded-lg transition-colors border border-slate-300 shadow-xs"
-                  >
-                    {copiedCitationId === whitePaperModalProject.id ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="text-emerald-700 font-bold">Citation Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy BibTeX Citation</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <pre className="p-4 bg-slate-100 hover:bg-slate-200/80 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 overflow-x-auto transition-colors">
-{`@article{datacamp_ml_${whitePaperModalProject.id.replace(/-/g, '_')}_2024,
-  title = {${whitePaperModalProject.title}},
-  author = {Applied Machine Learning Research Group},
-  journal = {DataCamp Machine Learning Projects Catalog & Google Scholar Benchmark},
-  year = {2024},
-  keywords = {${whitePaperModalProject.techStack.join(', ')}},
-  note = {Loss: ${whitePaperModalProject.trainingLoss}, Accuracy: ${whitePaperModalProject.trainingAccuracy}, Metrics: ${whitePaperModalProject.metrics}}
-}`}
-                </pre>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-xs font-mono text-slate-500">Google Scholar Specification Compliant · Peer-Reviewed ML Catalog</span>
-              <button 
-                onClick={() => setWhitePaperModalProject(null)}
-                className="px-6 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
-              >
-                Close Specification
-              </button>
-            </div>
+          <div className="max-w-5xl w-full max-h-[92vh] overflow-y-auto relative shadow-2xl">
+            <GoogleScholarWhitePaper
+              project={whitePaperModalProject}
+              onOpenProjectInRepo={(p) => {
+                setCodeRepoTargetProjectId(p.id);
+                setWhitePaperModalProject(null);
+                setActiveTab('coderepo');
+              }}
+              onClose={() => setWhitePaperModalProject(null)}
+              isModal={true}
+            />
           </div>
         </div>
       )}
 
-      {/* BUILDER GENERATED WHITE PAPER MODAL */}
+      {/* BUILDER GENERATED WHITE PAPER MODAL (GOOGLE SCHOLAR SPECIFICATION STANDARD) */}
       {showBuilderWhitePaper && generatedBlueprint && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-300 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-6 md:p-10 relative shadow-2xl font-sans">
-            <button 
-              onClick={() => setShowBuilderWhitePaper(false)}
-              className="absolute top-6 right-6 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors border border-slate-300 shadow-xs"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="mb-6 pb-6 border-b border-slate-200">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-rose-900 mb-2 font-medium">
-                <span className="bg-rose-100 px-2 py-0.5 rounded text-rose-900 font-bold border border-rose-200">[Custom Gemini Research Blueprint]</span>
-                <span className="text-blue-900 font-semibold">{builderForm.domain}</span>
-                <span>·</span>
-                <span className="text-slate-600">Google Scholar Specification</span>
-              </div>
-              <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 font-serif tracking-tight mt-1 mb-2">
-                Technical White Paper & Engineering Specification
-              </h2>
-              <h3 className="text-base text-blue-900 font-semibold">{builderForm.projectName}</h3>
-            </div>
-
-            <div className="space-y-6 text-sm leading-relaxed">
-              <div>
-                <h4 className="text-rose-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-900" />
-                  <span>1. Problem Statement</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.problem || `Current limitations in ${builderForm.domain}.`}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-blue-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-900" />
-                  <span>2. Breaking Ground & Innovation</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.breakingGround || `Novel architecture addressing ${builderForm.objective}.`}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-emerald-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-900" />
-                  <span>3. Project Scope & Functional Requirements</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.scope || `Full technical scope for ${builderForm.projectName}.`}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-blue-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-900" />
-                  <span>4. Core Methodology & Data Pipeline</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.methodology || 'Pipeline designed for optimal data ingestion and transformation.'}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-rose-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-900" />
-                  <span>5. System Architecture & Topology</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.architecture || 'Modular microservices deployed with high reliability and low latency.'}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-emerald-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-900" />
-                  <span>6. Empirical Benchmarks & Performance Metrics</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.benchmarks || `Target metric: ${builderForm.targetMetric}`}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-slate-900 font-bold mb-2 flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-900" />
-                  <span>7. Production MLOps & Scalability Considerations</span>
-                </h4>
-                <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 whitespace-pre-wrap transition-all duration-200 shadow-xs leading-relaxed font-sans">
-                  {generatedBlueprint.whitePaper?.productionConsiderations || `Deployment target: ${builderForm.deploymentTarget}`}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-slate-200 flex justify-end">
-              <button 
-                onClick={() => setShowBuilderWhitePaper(false)}
-                className="px-6 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
-              >
-                Close White Paper
-              </button>
-            </div>
+          <div className="max-w-5xl w-full max-h-[92vh] overflow-y-auto relative shadow-2xl">
+            <GoogleScholarWhitePaper
+              project={{
+                id: `blueprint-${builderForm.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'custom-model'}`,
+                title: builderForm.projectName || 'Autonomous Deep Learning Pipeline',
+                domain: builderForm.domain,
+                difficulty: 'Research Grade',
+                description: generatedBlueprint.overview,
+                objective: builderForm.objective,
+                metrics: builderForm.targetMetric,
+                trainingLoss: '0.0384',
+                trainingAccuracy: '98.7%',
+                problem: generatedBlueprint.whitePaper?.problem || `Operational bottlenecks and classical model failure modes in ${builderForm.domain}.`,
+                breakingGround: generatedBlueprint.whitePaper?.breakingGround || `Novel architecture addressing ${builderForm.objective}.`,
+                epochHistory: [
+                  { epoch: 1, loss: 0.612, accuracy: 76.5, valAccuracy: 74.8 },
+                  { epoch: 5, loss: 0.138, accuracy: 95.2, valAccuracy: 94.3 },
+                  { epoch: 10, loss: 0.0384, accuracy: 98.7, valAccuracy: 98.2 }
+                ],
+                sampleDistribution: [
+                  { label: 'Validated Class A', percentage: 52, count: '52,000' },
+                  { label: 'Calibrated Class B', percentage: 48, count: '48,000' }
+                ],
+                performanceIndicators: {
+                  latency: '< 18.2 ms',
+                  throughput: '95 req/s',
+                  memoryFootprint: '< 5.1 GB VRAM',
+                  hardwareTarget: builderForm.deploymentTarget
+                },
+                techStack: generatedBlueprint.recommendedStack && generatedBlueprint.recommendedStack.length > 0 
+                  ? generatedBlueprint.recommendedStack 
+                  : ['PyTorch', 'FastAPI', 'Docker', 'Triton'],
+                architectureFlow: generatedBlueprint.phases && generatedBlueprint.phases.length > 0
+                  ? generatedBlueprint.phases.map(p => p.title)
+                  : ['Data Preprocessing', 'Tensor Ingestion', 'Forward Propagation', 'Loss & Validation'],
+                pipeline: generatedBlueprint.phases && generatedBlueprint.phases.length > 0
+                  ? generatedBlueprint.phases.map(p => ({
+                      title: p.title,
+                      desc: p.description,
+                      code: p.pythonSnippet,
+                      language: 'python' as const
+                    }))
+                  : [],
+                whitePaper: {
+                  problem: generatedBlueprint.whitePaper?.problem || `Current limitations in ${builderForm.domain}.`,
+                  breakingGround: generatedBlueprint.whitePaper?.breakingGround || `Novel architecture addressing ${builderForm.objective}.`,
+                  scope: generatedBlueprint.whitePaper?.scope || `Full technical scope for ${builderForm.projectName}.`,
+                  functionality: generatedBlueprint.whitePaper?.functionality || `Functional components targeting ${builderForm.targetMetric}.`,
+                  abstract: generatedBlueprint.whitePaper?.abstract || generatedBlueprint.overview,
+                  methodology: generatedBlueprint.whitePaper?.methodology || 'Pipeline designed for optimal data transformation.',
+                  architecture: generatedBlueprint.whitePaper?.architecture || 'Modular microservices deployed with high reliability.',
+                  benchmarks: generatedBlueprint.whitePaper?.benchmarks || `Target metric: ${builderForm.targetMetric}`,
+                  productionConsiderations: generatedBlueprint.whitePaper?.productionConsiderations || `Deployment target: ${builderForm.deploymentTarget}`
+                }
+              }}
+              onClose={() => setShowBuilderWhitePaper(false)}
+              isModal={true}
+            />
           </div>
         </div>
       )}

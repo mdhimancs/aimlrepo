@@ -24,7 +24,8 @@ export type LearningPhase =
   | 'Phase 5: Deep Learning Foundations'
   | 'Phase 6: Computer Vision & CNNs'
   | 'Phase 7: Transformers & LLMs'
-  | 'Phase 8: RAG & GenAI Systems';
+  | 'Phase 8: RAG & GenAI Systems'
+  | 'Phase 9: MLOps & Production AI Systems';
 
 export interface CurriculumModule {
   id: string;
@@ -80,6 +81,24 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
     ],
     tags: ['AI Taxonomy', 'Statistics', 'Foundations']
   },
+  {
+    id: 'ds-harvard-stat110',
+    youtubeId: 'OqmZWngqnUA',
+    title: 'Harvard Statistics 110: Lecture 1 – Probability and Counting',
+    channel: 'Harvard University (Prof. Joe Blitzstein)',
+    phase: 'Phase 1: Foundations & Math',
+    phaseNumber: 1,
+    level: 'Intermediate',
+    duration: '50m',
+    summary:
+      'Flagship Harvard University lecture building rigorous intuition for probability spaces, combinatorics, sample spaces, and statistical thinking at the core of Bayesian ML and generative modeling.',
+    keyTakeaways: [
+      'Sample spaces, event algebra and naive definition of probability',
+      'Counting principles, permutations and binomial coefficients',
+      'Foundation for Bayes theorem, random variables and expectation'
+    ],
+    tags: ['Harvard', 'Probability', 'Statistics', 'Bayes']
+  },
 
   // Phase 2: Data Wrangling & SQL
   {
@@ -99,6 +118,42 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
       'Handling outliers, skewness and feature transformation'
     ],
     tags: ['EDA', 'Statistics', 'Data Wrangling', 'Hypothesis Testing']
+  },
+  {
+    id: 'ds-fcc-sql-full',
+    youtubeId: 'HXV3zeQKqGY',
+    title: 'SQL Tutorial – Full Database Course for Beginners',
+    channel: 'freeCodeCamp.org',
+    phase: 'Phase 2: Data Wrangling & SQL',
+    phaseNumber: 2,
+    level: 'Beginner',
+    duration: '4h 20m',
+    summary:
+      'Complete relational database and SQL engineering course covering schema design, complex joins, nested queries, aggregations, triggers, and analytical views for large-scale data pipelines.',
+    keyTakeaways: [
+      'Relational schemas, primary/foreign keys and normalization',
+      'Inner/outer joins, aggregations, unions and nested subqueries',
+      'Query optimization for tabular ML feature extraction'
+    ],
+    tags: ['SQL', 'Databases', 'Feature Extraction', 'ETL']
+  },
+  {
+    id: 'ds-fcc-data-eng',
+    youtubeId: 'ea7Xyivv_fI',
+    title: 'Learn the Essentials of Data Engineering Course',
+    channel: 'freeCodeCamp.org',
+    phase: 'Phase 2: Data Wrangling & SQL',
+    phaseNumber: 2,
+    level: 'Intermediate',
+    duration: '2h 00m',
+    summary:
+      'Production data engineering syllabus covering batch & streaming ingestion pipelines, data warehouses, lakehouse storage formats (Parquet/Arrow), orchestration, and quality validation.',
+    keyTakeaways: [
+      'Batch vs. streaming ETL/ELT architecture patterns',
+      'Columnar data lakes, partitioning and schema evolution',
+      'Building reliable feature stores for downstream ML training'
+    ],
+    tags: ['Data Engineering', 'ETL', 'Lakehouse', 'Pipelines']
   },
 
   // Phase 3: Classical Supervised ML
@@ -138,6 +193,60 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
     ],
     tags: ['Gradient Descent', 'Decision Trees', 'Regularization']
   },
+  {
+    id: 'ds-stanford-cs229',
+    youtubeId: 'jGwO_UgTS7I',
+    title: 'Stanford CS229: Machine Learning Course, Lecture 1',
+    channel: 'Stanford Online (Prof. Andrew Ng)',
+    phase: 'Phase 3: Classical Supervised ML',
+    phaseNumber: 3,
+    level: 'Intermediate',
+    duration: '1h 15m',
+    summary:
+      'Iconic Stanford University CS229 opening lecture by Prof. Andrew Ng establishing formal mathematical definitions of supervised learning, unsupervised learning, reinforcement learning, and gradient optimization.',
+    keyTakeaways: [
+      'Formal statistical framing of hypothesis spaces and empirical risk',
+      'Distinctions across supervised, unsupervised and RL paradigms',
+      'Roadmap for SVMs, GLMs, EM algorithm and learning theory'
+    ],
+    tags: ['Stanford CS229', 'Andrew Ng', 'Learning Theory', 'Supervised ML']
+  },
+  {
+    id: 'ds-harvard-cs50-ai',
+    youtubeId: '5NgNicANyqM',
+    title: "Harvard CS50's Introduction to Artificial Intelligence with Python – Full University Course",
+    channel: 'Harvard University / freeCodeCamp.org (Brian Yu & David J. Malan)',
+    phase: 'Phase 3: Classical Supervised ML',
+    phaseNumber: 3,
+    level: 'Intermediate',
+    duration: '11h 51m',
+    summary:
+      'Complete Harvard CS50 AI university course spanning graph search algorithms (A*, minimax), propositional knowledge, Bayesian uncertainty networks, optimization, machine learning, and neural networks.',
+    keyTakeaways: [
+      'Informed search (A*), adversarial minimax and constraint satisfaction',
+      'Bayesian probability networks, Markov models and reinforcement learning',
+      'Implementing classic AI & ML algorithms directly in Python'
+    ],
+    tags: ['Harvard CS50', 'AI Search', 'Bayesian Networks', 'Python AI']
+  },
+  {
+    id: 'ds-google-ml-hero',
+    youtubeId: 'KcsJCoSOk4Y',
+    title: 'Intro to Machine Learning (ML Zero to Hero – Part 1)',
+    channel: 'Google Developers (Laurence Moroney)',
+    phase: 'Phase 3: Classical Supervised ML',
+    phaseNumber: 3,
+    level: 'Beginner',
+    duration: '10m',
+    summary:
+      'Google Developers engineering briefing contrasting traditional imperative rules-based programming against modern data-driven machine learning pattern inference.',
+    keyTakeaways: [
+      'Paradigm shift from explicit if-else rules to learned model weights',
+      'Constructing a minimal supervised regression solver from scratch',
+      'Preparing clean labeled datasets for Google ML runtimes'
+    ],
+    tags: ['Google Developers', 'ML Paradigm', 'Foundations']
+  },
 
   // Phase 4: Ensembles & Advanced ML
   {
@@ -175,6 +284,42 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
       'Feature importance scoring and ensemble voting'
     ],
     tags: ['StatQuest', 'Random Forest', 'Bagging', 'Ensembles']
+  },
+  {
+    id: 'ds-statquest-xgboost',
+    youtubeId: 'OtD8wVaFm6E',
+    title: 'StatQuest: XGBoost Part 1 (of 4): Regression',
+    channel: 'StatQuest with Josh Starmer',
+    phase: 'Phase 4: Ensembles & Advanced ML',
+    phaseNumber: 4,
+    level: 'Intermediate',
+    duration: '23m',
+    summary:
+      'Step-by-step derivation of eXtreme Gradient Boosting (XGBoost) regression trees, covering similarity scores, gain pruning, lambda L2 regularization, and learning-rate shrinkage.',
+    keyTakeaways: [
+      'Computing XGBoost similarity scores and leaf split gain metrics',
+      'Role of cover, gamma pruning and lambda regularization penalties',
+      'Residual fitting via gradient boosting shrinkage'
+    ],
+    tags: ['XGBoost', 'Gradient Boosting', 'StatQuest', 'Tabular SOTA']
+  },
+  {
+    id: 'ds-statquest-pca',
+    youtubeId: 'FgakZw6K1QQ',
+    title: 'StatQuest: Principal Component Analysis (PCA), Step-by-Step',
+    channel: 'StatQuest with Josh Starmer',
+    phase: 'Phase 4: Ensembles & Advanced ML',
+    phaseNumber: 4,
+    level: 'Intermediate',
+    duration: '22m',
+    summary:
+      'Clear geometric walk-through of Principal Component Analysis (PCA), eigen-decomposition via Singular Value Decomposition (SVD), explained variance ratios, and dimensionality reduction.',
+    keyTakeaways: [
+      'Data centering, covariance maximization and principal component axes',
+      'SVD loading scores, eigenvalues and explained variance scree plots',
+      'High-dimensional feature compression prior to clustering or regression'
+    ],
+    tags: ['PCA', 'SVD', 'Dimensionality Reduction', 'StatQuest']
   },
 
   // Phase 5: Deep Learning Foundations
@@ -250,6 +395,24 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
     ],
     tags: ['PyTorch', 'Deep Learning', 'CUDA', 'Tensors']
   },
+  {
+    id: 'ds-mit-6s191',
+    youtubeId: 'QDX-1M5Nj7s',
+    title: 'MIT 6.S191: Introduction to Deep Learning – Foundations',
+    channel: 'MIT (Alexander Amini)',
+    phase: 'Phase 5: Deep Learning Foundations',
+    phaseNumber: 5,
+    level: 'Intermediate',
+    duration: '54m',
+    summary:
+      'Official MIT 6.S191 flagship lecture covering modern deep neural network foundations: perceptrons, matrix forward propagation, loss landscapes, adaptive gradient optimizers, and dropout regularization.',
+    keyTakeaways: [
+      'From biological perceptrons to stacked multi-layer dense tensors',
+      'Adaptive optimization methods (Adam, RMSProp) & mini-batching',
+      'Preventing overfitting with early stopping and dropout layers'
+    ],
+    tags: ['MIT 6.S191', 'Deep Learning', 'Optimization', 'Tensors']
+  },
 
   // Phase 6: Computer Vision & CNNs
   {
@@ -269,6 +432,24 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
       'Data augmentation for robust image classification'
     ],
     tags: ['TensorFlow', 'Keras', 'CNN', 'Computer Vision']
+  },
+  {
+    id: 'ds-stanford-cs231n',
+    youtubeId: 'vT1JkgnguCs',
+    title: 'Stanford CS231n: Deep Learning for Computer Vision, Lecture 1',
+    channel: 'Stanford Online (Justin Johnson & Serena Yeung)',
+    phase: 'Phase 6: Computer Vision & CNNs',
+    phaseNumber: 6,
+    level: 'Intermediate',
+    duration: '1h 04m',
+    summary:
+      'Renowned Stanford CS231n lecture tracing visual perception and ImageNet breakthroughs, explaining semantic gap challenges, convolutional architectures, and visual recognition pipelines.',
+    keyTakeaways: [
+      'Evolution of computer vision from SIFT features to deep CNNs',
+      'Understanding spatial hierarchies, receptive fields and ImageNet scale',
+      'Applications to object detection, segmentation and medical imaging'
+    ],
+    tags: ['Stanford CS231n', 'Computer Vision', 'CNN', 'ImageNet']
   },
 
   // Phase 7: Transformers & LLMs
@@ -362,6 +543,24 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
     ],
     tags: ['LLMs', 'RLHF', 'Fine-Tuning', 'Tokenization']
   },
+  {
+    id: 'ds-stanford-cs224n',
+    youtubeId: 'rmVRLeJRkl4',
+    title: 'Stanford CS224N: NLP with Deep Learning, Lecture 1 – Intro & Word Vectors',
+    channel: 'Stanford Online (Prof. Christopher Manning)',
+    phase: 'Phase 7: Transformers & LLMs',
+    phaseNumber: 7,
+    level: 'Intermediate',
+    duration: '1h 18m',
+    summary:
+      'Foundational Stanford CS224N university lecture by Prof. Christopher Manning introducing distributed word representations, Word2Vec Skip-Gram objectives, and semantic vector geometry.',
+    keyTakeaways: [
+      'Limitations of one-hot vectors vs. dense distributional semantics',
+      'Word2Vec Skip-Gram likelihood and negative sampling optimization',
+      'Linear substructure analogies as precursors to contextual Transformers'
+    ],
+    tags: ['Stanford CS224N', 'NLP', 'Word Vectors', 'Word2Vec']
+  },
 
   // Phase 8: RAG & GenAI Systems
   {
@@ -417,6 +616,98 @@ export const COMPREHENSIVE_CURRICULUM_MODULES: CurriculumModule[] = [
       'Prompt design and enterprise tuning strategies'
     ],
     tags: ['Generative AI', 'Foundation Models', 'Google Cloud']
+  },
+  {
+    id: 'ds-ibm-rag',
+    youtubeId: 'T-D1KVIuvjA',
+    title: 'What is Retrieval-Augmented Generation (RAG)?',
+    channel: 'IBM Technology (Marina Danilevsky)',
+    phase: 'Phase 8: RAG & GenAI Systems',
+    phaseNumber: 8,
+    level: 'Beginner',
+    duration: '7m',
+    summary:
+      'Concise IBM Technology architectural breakdown of Retrieval-Augmented Generation (RAG), demonstrating how grounded external knowledge eliminates LLM hallucinations and stale pretraining cutoffs.',
+    keyTakeaways: [
+      'Grounding proprietary LLM responses in live verified document stores',
+      'Mitigating hallucination risks without expensive weight retraining',
+      'Retrieval-to-prompt injection lifecycle for enterprise AI'
+    ],
+    tags: ['IBM', 'RAG', 'Enterprise AI', 'Hallucination Mitigation']
+  },
+  {
+    id: 'ds-ibm-ai-agents',
+    youtubeId: 'hvnPWgfmvyI',
+    title: 'The Power of AI Agents and Agentic AI Explained',
+    channel: 'IBM Technology (Deanna Berger)',
+    phase: 'Phase 8: RAG & GenAI Systems',
+    phaseNumber: 8,
+    level: 'Intermediate',
+    duration: '9m',
+    summary:
+      'IBM Technology deep dive into autonomous AI agents, tool-calling loops, episodic memory, multi-agent planning graphs, and deterministic safety guardrails.',
+    keyTakeaways: [
+      'Single-turn LLM prompting vs. multi-step agentic planning loops',
+      'Structured tool calling, external API execution and verification',
+      'Multi-agent orchestration patterns and human-in-the-loop governance'
+    ],
+    tags: ['IBM', 'AI Agents', 'Agentic AI', 'Tool Use']
+  },
+
+  // Phase 9: MLOps & Production AI Systems
+  {
+    id: 'ds-ibm-mlops',
+    youtubeId: '06iBpkvjZ8Q',
+    title: 'What is MLOps?',
+    channel: 'IBM Technology (David Adeyemi)',
+    phase: 'Phase 9: MLOps & Production AI Systems',
+    phaseNumber: 9,
+    level: 'Beginner',
+    duration: '8m',
+    summary:
+      'IBM Technology blueprint explaining how Machine Learning Operations (MLOps) unifies data governance, CI/CD/CT automated retraining pipelines, model registries, and production drift monitoring.',
+    keyTakeaways: [
+      'Bridging experimental notebooks and resilient CI/CD/CT pipelines',
+      'Detecting covariate data drift and concept accuracy degradation',
+      'Model governance, lineage auditing and reproducible deployments'
+    ],
+    tags: ['IBM', 'MLOps', 'Model Governance', 'Drift Monitoring']
+  },
+  {
+    id: 'ds-fcc-mlops-prod',
+    youtubeId: '4Ua2fvjquss',
+    title: 'MLOps Course – Build Machine Learning Production Grade Projects',
+    channel: 'freeCodeCamp.org',
+    phase: 'Phase 9: MLOps & Production AI Systems',
+    phaseNumber: 9,
+    level: 'Advanced',
+    duration: '4h 02m',
+    summary:
+      'Full end-to-end production MLOps engineering course covering modular project templating, ZenML/MLflow experiment tracking, FastAPI/Docker serving containers, CI/CD testing, and telemetry alerts.',
+    keyTakeaways: [
+      'Orchestrating reproducible training pipelines with MLflow & ZenML',
+      'Containerizing low-latency inference APIs with Docker & CI/CD',
+      'Production latency/throughput SLA monitoring and automated rollback'
+    ],
+    tags: ['MLOps', 'Docker', 'MLflow', 'Production AI']
+  },
+  {
+    id: 'ds-mlops-18-files-docker',
+    youtubeId: 'U_k8lI3VbXo',
+    title: '18 files with .gitignore, CI/CD & Docker: Production MLOps Repository Template',
+    channel: 'freeCodeCamp.org / DevOps Masterclass',
+    phase: 'Phase 9: MLOps & Production AI Systems',
+    phaseNumber: 9,
+    level: 'Advanced',
+    duration: '2h 15m',
+    summary:
+      'Master the 18 essential files of a production ML repository including robust .gitignore rules for PyTorch/Caches, multi-stage Dockerfiles for low-latency inference, and GitHub Actions CI/CD workflows for automated linting, pytest, and cloud deployment.',
+    keyTakeaways: [
+      'Structuring production ML repositories with 18 standard files',
+      'Configuring .gitignore for PyTorch checkpoints, data caches and virtualenvs',
+      'Multi-stage Docker containerization and GitHub Actions CI/CD pipelines'
+    ],
+    tags: ['MLOps', 'Docker', 'CI/CD', '.gitignore', 'GitHub Actions']
   }
 ];
 
@@ -429,7 +720,8 @@ export const CURRICULUM_PHASES: LearningPhase[] = [
   'Phase 5: Deep Learning Foundations',
   'Phase 6: Computer Vision & CNNs',
   'Phase 7: Transformers & LLMs',
-  'Phase 8: RAG & GenAI Systems'
+  'Phase 8: RAG & GenAI Systems',
+  'Phase 9: MLOps & Production AI Systems'
 ];
 
 export default function LearningSectionTab() {
@@ -490,17 +782,14 @@ export default function LearningSectionTab() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-blue-900 mb-2 font-semibold">
-              <span className="bg-blue-100 px-2 py-0.5 rounded text-blue-900 font-bold border border-blue-200">
-                [Complete End-to-End Syllabus]
-              </span>
-              <span>Data Science · Machine Learning · Deep Learning · LLMs &amp; RAG Mastery</span>
+              <span>Data Science · Machine Learning · Deep Learning · LLMs, RAG &amp; MLOps Mastery</span>
             </div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
               <GraduationCap className="w-6 h-6 text-indigo-600" />
               <span>Data Science &amp; AI/ML Masterclass Curriculum</span>
             </h2>
             <p className="text-slate-700 text-sm mt-1 max-w-4xl leading-relaxed">
-              A structured 8-phase syllabus mapping out your learning journey from absolute beginner Python foundations and statistics up to production-grade Transformers, RAG systems, and MLOps.
+              A structured 9-phase university &amp; industry syllabus (Harvard, Stanford, MIT, Google, IBM &amp; freeCodeCamp) mapping your path from Python foundations and probability up to Transformers, RAG, and production MLOps.
             </p>
           </div>
 
@@ -611,7 +900,7 @@ export default function LearningSectionTab() {
 
               <h3 className="text-xl font-bold text-slate-900 leading-snug">{activeVideo.title}</h3>
               <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
-                <Youtube className="w-2.5 h-2.5 text-rose-600" />
+                <Youtube className="w-2.5 h-2.5 text-rose-600" style={{ transform: 'scaleX(1.15)' }} />
                 <span>Instructor / Channel: {activeVideo.channel}</span>
               </p>
 
@@ -653,7 +942,7 @@ export default function LearningSectionTab() {
                 rel="noopener noreferrer"
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition-colors shadow-xs"
               >
-                <Youtube className="w-2.5 h-2.5" />
+                <Youtube className="w-2.5 h-2.5" style={{ transform: 'scaleX(1.15)' }} />
                 <span>Open on YouTube</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
@@ -680,13 +969,14 @@ export default function LearningSectionTab() {
                   setActiveVideo(module);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
+                title={module.title}
                 className={`cursor-pointer rounded-xl bg-slate-100 border p-2.5 transition-all duration-200 hover:bg-slate-200 hover:shadow-md flex flex-col justify-between ${
                   isSelected ? 'border-indigo-600 ring-2 ring-indigo-600/25 bg-slate-200' : 'border-slate-300'
                 }`}
               >
                 <div>
                   {/* Thumbnail */}
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-slate-900 border border-slate-300 mb-2 group">
+                  <div className="relative rounded-lg overflow-hidden bg-slate-900 border border-slate-300 aspect-video mb-2 group">
                     <img
                       src={`https://img.youtube.com/vi/${module.youtubeId}/hqdefault.jpg`}
                       alt={module.title}
@@ -694,18 +984,21 @@ export default function LearningSectionTab() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute inset-0 bg-slate-900/20 group-hover:bg-slate-900/10 transition-colors flex items-center justify-center">
-                      <div className="w-5 h-5 rounded-full bg-white/95 shadow-xs flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Play className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600 ml-0.5" />
+                      <div className="rounded-full bg-white/95 shadow-xs w-[23px] h-5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Play
+                          className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600 ml-0.5"
+                          style={{ transform: 'scaleX(1.15)' }}
+                        />
                       </div>
                     </div>
-                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-slate-900/85 text-white text-[9px] font-mono font-semibold">
+                    <span className="absolute bottom-0.5 right-0.5 rounded bg-slate-900/85 text-white font-mono text-[9px] px-1.5 py-0.5 font-semibold">
                       {module.duration}
                     </span>
-                    <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-indigo-700 text-white text-[9px] font-mono font-bold shadow-xs">
+                    <span className="absolute top-0.5 left-0.5 rounded bg-indigo-700 text-white font-mono text-[9px] px-1.5 py-0.5 font-bold shadow-xs">
                       P{module.phaseNumber}
                     </span>
                     {isWatched && (
-                      <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-semibold flex items-center gap-0.5 shadow-xs">
+                      <span className="absolute top-0.5 right-0.5 rounded bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 font-semibold flex items-center gap-0.5 shadow-xs">
                         <CheckCircle2 className="w-2.5 h-2.5" />
                         <span>Done</span>
                       </span>
@@ -730,7 +1023,7 @@ export default function LearningSectionTab() {
                     </span>
                   </div>
 
-                  <h3 className="text-xs font-bold text-slate-900 leading-snug mb-1 line-clamp-2">
+                  <h3 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mb-1">
                     {module.title}
                   </h3>
                   <p className="text-[10px] font-semibold text-indigo-700 mb-1 truncate">{module.channel}</p>

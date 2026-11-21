@@ -12,6 +12,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { FlagshipProject, BlogArticle } from '../types';
+import GoogleScholarWhitePaper from './GoogleScholarWhitePaper';
 
 const ENGINEERING_BLOG_POSTS: BlogArticle[] = [
   {
@@ -301,11 +302,9 @@ export default function WhitePaperBlogTab({
               <span className="bg-rose-100 px-2 py-0.5 rounded text-rose-900 font-bold border border-rose-200">
                 [Technical White Papers & Engineering Blog]
               </span>
-              <span>Google Scholar Preprint Specification</span>
-              <span>·</span>
               <span className="text-blue-900 font-semibold">{allEntries.length} Peer-Reviewed Specs & Articles</span>
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 font-serif tracking-tight">
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
               Research White Papers & Technical Engineering Blog
             </h2>
             <p className="text-slate-700 text-sm mt-1 max-w-3xl leading-relaxed">
@@ -376,17 +375,19 @@ export default function WhitePaperBlogTab({
                       entry.kind === 'blog'
                         ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                         : entry.sourceLabel === 'Flagship White Paper'
-                        ? 'bg-rose-100 text-rose-900 border-rose-300'
-                        : 'bg-blue-100 text-blue-900 border-blue-300'
+                        ? 'bg-blue-100 text-blue-900 border-blue-300'
+                        : 'bg-slate-200 text-slate-800 border-slate-300'
                     }`}
                   >
-                    {entry.kind === 'blog' ? '[BLOG]' : '[PDF SPEC]'} {entry.sourceLabel}
+                    {entry.kind === 'blog' ? '[BLOG]' : '[SCHOLAR SPEC]'} {entry.sourceLabel}
                   </span>
-                  {entry.kind === 'blog' && (
+                  {entry.kind === 'blog' ? (
                     <span className="text-[10px] font-mono text-slate-600">{entry.article.readTime}</span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-blue-900 font-semibold">Scholar Standard</span>
                   )}
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 leading-snug mb-1 font-serif">{title}</h3>
+                <h3 className="text-sm font-bold text-slate-900 leading-snug mb-1">{title}</h3>
                 <p className="text-xs text-blue-900 font-medium">{subtitle}</p>
               </div>
             );
@@ -396,188 +397,10 @@ export default function WhitePaperBlogTab({
         {/* Right Column: Full Google Scholar Paper / Blog Reader */}
         <div className="lg:col-span-8">
           {activeEntry && activeEntry.kind === 'paper' && (
-            <article className="bg-white border border-slate-300 rounded-2xl p-6 md:p-10 shadow-md space-y-6">
-              {/* Scholar Header */}
-              <div className="pb-6 border-b border-slate-200">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-rose-900 font-semibold">
-                    <span className="bg-rose-100 px-2 py-0.5 rounded text-rose-900 font-bold border border-rose-200">
-                      [Google Scholar Preprint]
-                    </span>
-                    <span className="text-blue-900">{activeEntry.project.domain}</span>
-                    <span>·</span>
-                    <span className="text-slate-600">DOI: 10.1145/ml-studio.{activeEntry.project.id}</span>
-                  </div>
-
-                  <button
-                    onClick={() => onOpenProjectInRepo(activeEntry.project)}
-                    className="px-3.5 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
-                  >
-                    <FolderGit2 className="w-3.5 h-3.5" />
-                    <span>Inspect Full Code Repo</span>
-                  </button>
-                </div>
-
-                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 font-serif tracking-tight mb-2">
-                  {activeEntry.project.title}
-                </h1>
-                <p className="text-xs font-mono text-slate-600 mb-4">
-                  Authors: Applied Machine Learning Research Group · Tier: {activeEntry.project.difficulty} ·{' '}
-                  {activeEntry.sourceLabel}
-                </p>
-
-                {/* Metrics Strip */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-100 hover:bg-slate-200/80 p-4 rounded-xl border border-slate-300 text-xs font-mono transition-colors">
-                  <div>
-                    <span className="text-slate-500 block text-[10px] uppercase">Final Loss</span>
-                    <span className="text-blue-900 font-bold">{activeEntry.project.trainingLoss}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block text-[10px] uppercase">Training Accuracy</span>
-                    <span className="text-emerald-900 font-bold">{activeEntry.project.trainingAccuracy}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block text-[10px] uppercase">Inference Latency</span>
-                    <span className="text-rose-900 font-bold">{activeEntry.project.performanceIndicators.latency}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block text-[10px] uppercase">Hardware Target</span>
-                    <span className="text-slate-900 font-bold">{activeEntry.project.performanceIndicators.hardwareTarget}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Abstract */}
-              <div className="bg-slate-100 hover:bg-slate-200/90 p-5 rounded-xl border border-slate-300 transition-colors">
-                <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-900 mb-2">
-                  Abstract
-                </h3>
-                <p className="text-sm text-slate-800 leading-relaxed italic font-serif">
-                  {activeEntry.project.whitePaper.abstract}
-                </p>
-              </div>
-
-              {/* 7-Section White Paper Body */}
-              <div className="space-y-5 text-sm leading-relaxed">
-                <div>
-                  <h4 className="text-rose-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-900" />
-                    <span>1. Problem Statement</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors">
-                    {activeEntry.project.problem}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-blue-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-900" />
-                    <span>2. Breaking Ground & Novel Contribution</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors">
-                    {activeEntry.project.breakingGround}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-emerald-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-900" />
-                    <span>3. Scope & Functional Specifications</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors whitespace-pre-wrap">
-                    {activeEntry.project.whitePaper.scope}
-                    {'\n\n'}
-                    {activeEntry.project.whitePaper.functionality}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-blue-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-900" />
-                    <span>4. Core Methodology & Feature Pipeline</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors whitespace-pre-wrap">
-                    {activeEntry.project.whitePaper.methodology}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-rose-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-900" />
-                    <span>5. System Architecture & Data Flow Topology</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors space-y-3">
-                    <p>{activeEntry.project.whitePaper.architecture}</p>
-                    <div className="flex flex-wrap items-center gap-2 pt-2">
-                      {activeEntry.project.architectureFlow.map((step, i) => (
-                        <span
-                          key={i}
-                          className="text-xs font-mono px-2.5 py-1 rounded bg-white border border-slate-300 text-blue-900 font-semibold"
-                        >
-                          0{i + 1}. {step}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-emerald-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-900" />
-                    <span>6. Empirical Benchmarks & Evaluation Metrics</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors">
-                    {activeEntry.project.whitePaper.benchmarks}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-slate-900 font-bold mb-1.5 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-900" />
-                    <span>7. Production MLOps & Deployment Considerations</span>
-                  </h4>
-                  <div className="text-slate-800 bg-slate-100 hover:bg-slate-200/90 p-4 rounded-xl border border-slate-300 transition-colors">
-                    {activeEntry.project.whitePaper.productionConsiderations}
-                  </div>
-                </div>
-              </div>
-
-              {/* BibTeX Citation Box */}
-              <div className="pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-rose-900 font-bold flex items-center gap-2 text-xs font-mono uppercase">
-                    <BookOpen className="w-4 h-4 text-rose-900" />
-                    <span>Google Scholar BibTeX Citation</span>
-                  </h4>
-                  <button
-                    onClick={() => copyBibtex(activeEntry.project)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-900 text-xs font-semibold rounded-lg border border-slate-300 transition-colors"
-                  >
-                    {copiedId === activeEntry.project.id ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-700" />
-                        <span className="text-emerald-800 font-bold">Copied BibTeX</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Citation</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <pre className="p-4 bg-slate-100 hover:bg-slate-200/80 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 overflow-x-auto whitespace-pre-wrap break-words transition-colors">
-{`@article{ml_studio_${activeEntry.project.id.replace(/-/g, '_')}_2024,
-  title = {${activeEntry.project.title}},
-  author = {Applied Machine Learning Research Group},
-  journal = {ML Studio Architect & Google Scholar Benchmark Series},
-  year = {2024},
-  keywords = {${activeEntry.project.techStack.join(', ')}},
-  note = {Loss: ${activeEntry.project.trainingLoss}, Accuracy: ${activeEntry.project.trainingAccuracy}}
-}`}
-                </pre>
-              </div>
-            </article>
+            <GoogleScholarWhitePaper
+              project={activeEntry.project}
+              onOpenProjectInRepo={onOpenProjectInRepo}
+            />
           )}
 
           {activeEntry && activeEntry.kind === 'blog' && (
@@ -593,7 +416,7 @@ export default function WhitePaperBlogTab({
                   <span>·</span>
                   <span className="text-slate-600">{activeEntry.article.date}</span>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 font-serif tracking-tight mb-2">
+                <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight mb-2">
                   {activeEntry.article.title}
                 </h1>
                 <p className="text-xs font-mono text-slate-600 mb-4">By {activeEntry.article.authors}</p>
@@ -613,7 +436,7 @@ export default function WhitePaperBlogTab({
                 <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-900 mb-1.5">
                   Executive Summary
                 </h3>
-                <p className="text-sm text-slate-800 leading-relaxed font-serif">{activeEntry.article.summary}</p>
+                <p className="text-sm text-slate-800 leading-relaxed">{activeEntry.article.summary}</p>
               </div>
 
               <div className="space-y-6">

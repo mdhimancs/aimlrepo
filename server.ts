@@ -55,10 +55,31 @@ async function startServer() {
     return res.json(ragEngine.getStatus());
   });
 
-  // Clear entire FAISS store
+  // Clear entire FAISS + BM25 store
   app.post('/api/rag/clear', (_req, res) => {
     ragEngine.clearAll();
     res.json(ragEngine.getStatus());
+  });
+
+  // Hybrid Search (Dense Vector + BM25 Sparse RRF) Inspection Endpoint
+  app.post('/api/rag/search', async (req, res) => {
+    try {
+      const { query, topK, mode, alpha } = req.body || {};
+      const q = String(query || '').trim();
+      if (!q) {
+        return res.status(400).json({ error: 'Search query cannot be empty.' });
+      }
+      const searchMode = mode === 'dense' || mode === 'bm25' ? mode : 'hybrid';
+      const result = await ragEngine.hybridSearch(ai, q, {
+        topK: Number(topK) || 5,
+        mode: searchMode,
+        alpha: alpha !== undefined ? Number(alpha) : 0.55,
+      });
+      return res.json(result);
+    } catch (err: any) {
+      console.error('RAG hybrid search error:', err);
+      return res.status(500).json({ error: err.message || 'Hybrid search execution failed.' });
+    }
   });
 
   // API endpoint to generate custom AI/ML project blueprint & code
@@ -131,25 +152,31 @@ Provide a detailed response in strict JSON format with the following structure:
     }
   });
 
-  // API endpoint for RAG-Enabled AI/ML Expert Copilot Chat
+  // API endpoint for Hybrid-RAG-Enabled AI/ML Expert Copilot Chat
   app.post('/api/ai-chat', async (req, res) => {
     try {
-      const { message, useRag = true } = req.body || {};
+      const { message, useRag = true, searchMode = 'hybrid', alpha = 0.55 } = req.body || {};
       const queryText = String(message || 'Hello');
 
       const status = ragEngine.getStatus();
-      const citations =
+      const validMode = searchMode === 'dense' || searchMode === 'bm25' ? searchMode : 'hybrid';
+      const searchResult =
         useRag && status.totalVectors > 0
-          ? await ragEngine.search(ai, queryText, 4)
-          : [];
+          ? await ragEngine.hybridSearch(ai, queryText, {
+              topK: 4,
+              mode: validMode,
+              alpha: Number(alpha),
+            })
+          : null;
+      const citations = searchResult ? searchResult.results : [];
 
       const contextBlock =
         citations.length > 0
-          ? `\n\nRETRIEVED FAISS CONTEXT (IndexFlatIP top-${citations.length} matches):\n` +
+          ? `\n\nRETRIEVED HYBRID RAG CONTEXT (${validMode.toUpperCase()} top-${citations.length} matches):\n` +
             citations
               .map(
                 (c, i) =>
-                  `[Citation ${i + 1} | ${c.docTitle} · Chunk #${c.chunkIndex} · Cosine=${c.score}]\n${c.snippet}`
+                  `[Citation ${i + 1} | ${c.docTitle} · Chunk #${c.chunkIndex} · Hybrid=${c.score} · Dense=${c.denseScore} · BM25=${c.bm25Score}]\n${c.snippet}`
               )
               .join('\n\n')
           : '';
@@ -158,12 +185,12 @@ Provide a detailed response in strict JSON format with the following structure:
         model: 'gemini-4-hydrogen',
         config: {
           systemInstruction:
-            'You are an expert AI/ML Engineering & Research RAG Copilot. You help developers build, train, debug, and analyze ML papers and architectures. When retrieved FAISS context chunks are provided, prioritize and synthesize facts from those chunks and cite them explicitly as [Citation 1], [Citation 2], etc. Be concise, technical, and precise.',
+            'You are an expert AI/ML Engineering & Research RAG Copilot. You help developers build, train, debug, and analyze ML papers and architectures. When retrieved Hybrid RAG (Dense + BM25) context chunks are provided, prioritize and synthesize facts from those chunks and cite them explicitly as [Citation 1], [Citation 2], etc. Be concise, technical, and precise.',
         },
       });
 
       const promptWithRag = citations.length > 0
-        ? `User Question:\n${queryText}${contextBlock}\n\nAnswer the user question grounded in the retrieved FAISS context where relevant, and cite [Citation N].`
+        ? `User Question:\n${queryText}${contextBlock}\n\nAnswer the user question grounded in the retrieved context where relevant, and cite [Citation N].`
         : queryText;
 
       const response = await chat.sendMessage({
@@ -173,6 +200,7 @@ Provide a detailed response in strict JSON format with the following structure:
       res.json({
         reply: response.text,
         citations,
+        searchLatencyMs: searchResult?.latencyMs,
         indexedVectorCount: status.totalVectors,
       });
     } catch (err: any) {

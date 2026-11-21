@@ -21,6 +21,70 @@ export interface ProjectBlueprint {
   };
 }
 
+export type OpExCostKey =
+  | 'infra'
+  | 'aiOps'
+  | 'mlOps'
+  | 'energy'
+  | 'manpower'
+  | 'maintenance';
+
+export interface CapExBreakdownItem {
+  label: string;
+  amountUsd: number;
+  sharePct: number;
+  notes: string;
+}
+
+export interface OpExBreakdownItem {
+  key: OpExCostKey;
+  label: string;
+  shortLabel: string;
+  description: string;
+  year1Usd: number;
+  year20Usd: number;
+  total20YrUsd: number;
+  sharePct: number;
+}
+
+export interface YearlyOpExRow {
+  year: number;
+  calendarYear: number;
+  scaleFactor: number;
+  infra: number;
+  aiOps: number;
+  mlOps: number;
+  energy: number;
+  manpower: number;
+  maintenance: number;
+  totalOpEx: number;
+  yoyDeltaPct: number;
+  cumulativeOpEx: number;
+  cumulativeTco: number;
+}
+
+export interface ProjectEconomics {
+  deploymentTier:
+    | 'Sovereign / World-Scale (1.50B–2.41B)'
+    | 'Enterprise / Research Cluster'
+    | 'Production Multi-Node'
+    | 'Lean Edge / Serverless';
+  totalCapExUsd: number;
+  capExBreakdown: CapExBreakdownItem[];
+  opExYear1Usd: number;
+  opExYear10Usd: number;
+  opExYear20Usd: number;
+  opExYoYGrowthPct: number;
+  totalOpEx20YrUsd: number;
+  totalTco20YrUsd: number;
+  estimatedPowerKw: number;
+  annualEnergyMwhY1: number;
+  fteHeadcount: number;
+  opExCategories: OpExBreakdownItem[];
+  yearlySchedule: YearlyOpExRow[];
+  unitCostSummary: string;
+}
+
 export interface FlagshipProject {
   id: string;
   title: string;
@@ -62,6 +126,7 @@ export interface FlagshipProject {
     benchmarks: string;
     productionConsiderations: string;
   };
+  economics?: ProjectEconomics;
 }
 
 export interface BlogArticle {
@@ -86,6 +151,29 @@ export interface BlogArticle {
   }[];
 }
 
+export type RagProcessingStatus = 'indexed' | 'processing' | 'degraded' | 'failed';
+export type RagSearchMode = 'hybrid' | 'dense' | 'bm25';
+
+export interface RagDocumentTokenStats {
+  sourceTokens: number;
+  totalChunkTokens: number;
+  overlapTokens: number;
+  avgChunkTokens: number;
+  minChunkTokens: number;
+  maxChunkTokens: number;
+}
+
+export interface RagDocumentQualityMetrics {
+  overallScore: number;
+  cleanlinessPct: number;
+  chunkUniformityPct: number;
+  overlapRatioPct: number;
+  orphanChunks: number;
+  uniqueTerms: number;
+  avgChunkChars: number;
+  verdict: 'Optimal' | 'Good' | 'Needs Tuning';
+}
+
 export interface RagDocumentSummary {
   id: string;
   title: string;
@@ -97,6 +185,36 @@ export interface RagDocumentSummary {
   embeddingDim: number;
   indexedAt: string;
   preview: string;
+  status: RagProcessingStatus;
+  statusNote?: string;
+  stageStatus: {
+    extract: 'ok' | 'failed';
+    split: 'ok' | 'failed';
+    denseEmbed: 'ok' | 'skipped' | 'failed';
+    bm25Index: 'ok' | 'failed';
+  };
+  tokenStats: RagDocumentTokenStats;
+  qualityMetrics: RagDocumentQualityMetrics;
+  latencyMs: {
+    extractMs: number;
+    splitMs: number;
+    embedMs: number;
+    bm25Ms: number;
+    indexMs: number;
+    totalMs: number;
+  };
+}
+
+export interface RagAuditEvent {
+  id: string;
+  docTitle: string;
+  sourceType: 'raw_text' | 'pdf_url';
+  status: RagProcessingStatus;
+  timestamp: string;
+  totalMs: number;
+  tokensProcessed: number;
+  qualityScore: number;
+  message: string;
 }
 
 export interface RagCitation {
@@ -105,7 +223,28 @@ export interface RagCitation {
   source: string;
   chunkIndex: number;
   score: number;
+  denseScore: number;
+  bm25Score: number;
+  denseRank?: number;
+  bm25Rank?: number;
+  matchedTerms: string[];
+  tokenCount: number;
+  retrievalMode: RagSearchMode;
   snippet: string;
+}
+
+export interface RagSearchResponse {
+  query: string;
+  mode: RagSearchMode;
+  alpha: number;
+  latencyMs: {
+    denseMs: number;
+    bm25Ms: number;
+    fusionMs: number;
+    totalMs: number;
+  };
+  queryTokens: string[];
+  results: RagCitation[];
 }
 
 export interface RagStatusResponse {
@@ -116,6 +255,29 @@ export interface RagStatusResponse {
   totalVectors: number;
   embeddingDim: number;
   documents: RagDocumentSummary[];
+  bm25Stats: {
+    totalUniqueTerms: number;
+    avgDocLengthTokens: number;
+    k1: number;
+    b: number;
+  };
+  tokenUsageTotals: {
+    totalSourceTokens: number;
+    totalChunkTokens: number;
+    totalOverlapTokens: number;
+    totalIngestTokens: number;
+    queryEmbeddingTokens: number;
+  };
+  auditSummary: {
+    avgQualityScore: number;
+    indexedDocs: number;
+    degradedDocs: number;
+    failedDocs: number;
+    totalOrphanChunks: number;
+    totalQueriesExecuted: number;
+    avgQueryLatencyMs: number;
+  };
+  recentAuditEvents: RagAuditEvent[];
 }
 
 export interface RagIngestResponse {
@@ -126,6 +288,7 @@ export interface RagIngestResponse {
     extractMs: number;
     splitMs: number;
     embedMs: number;
+    bm25Ms: number;
     indexMs: number;
     embeddingDim: number;
   };

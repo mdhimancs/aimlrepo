@@ -10,6 +10,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { FlagshipProject } from '../types';
+import ThreeDResearchManifold from './ThreeDResearchManifold';
 
 interface ProjectTelemetryChartsProps {
   project: FlagshipProject;
@@ -21,6 +22,7 @@ interface ComparisonRow {
   lossVal: number;
   stdDev: string;
   cycleTime: string;
+  p99Time: string;
   efficiencyPct: number;
   isProposed: boolean;
 }
@@ -121,6 +123,15 @@ function buildComparisons(project: FlagshipProject): ComparisonRow[] {
     baseName2 = 'Ridge Linear Regression';
   }
 
+  const isLowJitter =
+    project.techStack.some((t) => /rust|c\+\+|tvm|io_uring|onnx/i.test(t)) ||
+    project.pipeline.some((p) => p.language === 'rust');
+  const proposedP99 = Number((latencyMs * (isLowJitter ? 1.14 : 1.38)).toFixed(2));
+  const base1P95 = Number((latencyMs * 2.15).toFixed(1));
+  const base1P99 = Number((base1P95 * 1.48).toFixed(1));
+  const base2P95 = Number((latencyMs * 1.45).toFixed(1));
+  const base2P99 = Number((base2P95 * 1.62).toFixed(1));
+
   return [
     {
       model: `${project.techStack.slice(0, 2).join(' + ')} (Proposed)`,
@@ -128,6 +139,7 @@ function buildComparisons(project: FlagshipProject): ComparisonRow[] {
       lossVal: proposedLoss,
       stdDev: `±${proposedStd}%`,
       cycleTime: project.performanceIndicators.latency.split('/')[0].trim(),
+      p99Time: `${proposedP99}ms`,
       efficiencyPct: 94,
       isProposed: true
     },
@@ -136,7 +148,8 @@ function buildComparisons(project: FlagshipProject): ComparisonRow[] {
       accuracyPct: Number(Math.max(55, proposedAcc - 6.4).toFixed(1)),
       lossVal: Number((proposedLoss * 1.48 + 0.08).toFixed(3)),
       stdDev: `±${(proposedStd * 1.85).toFixed(2)}%`,
-      cycleTime: `${(latencyMs * 2.15).toFixed(1)}ms`,
+      cycleTime: `${base1P95}ms`,
+      p99Time: `${base1P99}ms`,
       efficiencyPct: 68,
       isProposed: false
     },
@@ -145,7 +158,8 @@ function buildComparisons(project: FlagshipProject): ComparisonRow[] {
       accuracyPct: Number(Math.max(48, proposedAcc - 13.8).toFixed(1)),
       lossVal: Number((proposedLoss * 2.15 + 0.16).toFixed(3)),
       stdDev: `±${(proposedStd * 2.65).toFixed(2)}%`,
-      cycleTime: `${(latencyMs * 1.45).toFixed(1)}ms`,
+      cycleTime: `${base2P95}ms`,
+      p99Time: `${base2P99}ms`,
       efficiencyPct: 49,
       isProposed: false
     }
@@ -155,7 +169,7 @@ function buildComparisons(project: FlagshipProject): ComparisonRow[] {
 export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChartsProps) {
   const history = project.epochHistory;
   const maxLoss = Math.max(2.2, ...history.map((h) => h.loss * 1.1));
-  const stepX = history.length > 1 ? 460 / (history.length - 1) : 460;
+  const stepX = history.length > 1 ? 430 / (history.length - 1) : 430;
 
   const comparisons = useMemo(() => buildComparisons(project), [project]);
 
@@ -204,22 +218,30 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
     const upperPts = history.map((h, i) => {
       const sigma = Math.max(0.015, Math.abs(h.accuracy - h.valAccuracy) * 0.8 + 0.018);
       const yVal = Math.min(1.0, h.accuracy + sigma);
-      return `${20 + i * stepX},${150 - yVal * 130}`;
+      return `${48 + i * stepX},${150 - yVal * 124}`;
     });
     const lowerPts = [...history].reverse().map((h, revIdx) => {
       const i = history.length - 1 - revIdx;
       const sigma = Math.max(0.015, Math.abs(h.accuracy - h.valAccuracy) * 0.8 + 0.018);
       const yVal = Math.max(0.0, h.accuracy - sigma);
-      return `${20 + i * stepX},${150 - yVal * 130}`;
+      return `${48 + i * stepX},${150 - yVal * 124}`;
     });
     return [...upperPts, ...lowerPts].join(' ');
   }, [history, stepX]);
 
   return (
     <div className="space-y-6">
+      {/* Interactive Three.js WebGL 3D Research Manifold */}
+      <ThreeDResearchManifold
+        project={project}
+        epochPoints={history}
+        initialMode="val_acc_pillars"
+        heightClass="h-[360px]"
+      />
+
       {/* ROW 1: Training Convergence + Accuracy/Deviation Band + Sample Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Graph 1: Accuracy, Loss & Deviation Convergence */}
+        {/* Graph 1: 3D Accuracy, Loss & Deviation Convergence */}
         <div className="lg:col-span-7 bg-slate-100 hover:bg-slate-200 p-6 rounded-xl border border-slate-300 space-y-5 transition-all duration-200 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
@@ -243,34 +265,69 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
           </div>
 
           <div className="h-52 w-full relative bg-white p-4 rounded-xl border border-slate-300 shadow-inner">
-            <svg className="w-full h-full overflow-visible" viewBox="0 0 500 165">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 520 190">
+              {/* 3D Isometric Stage Floor & Back Depth Plane */}
+              <polygon points="46,152 60,138 502,138 488,152" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
+              <polygon points="46,24 60,10 60,138 46,152" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+
               {/* Grid lines */}
-              {[0, 40, 80, 120, 160].map((y, idx) => (
+              {[18, 52, 86, 120, 152].map((y, idx) => (
                 <line
                   key={idx}
-                  x1="20"
+                  x1={y === 152 ? 46 : 60}
                   y1={y}
-                  x2="480"
+                  x2={y === 152 ? 488 : 502}
                   y2={y}
                   stroke="#cbd5e1"
-                  strokeDasharray={y === 160 ? undefined : '4'}
+                  strokeDasharray={y === 152 ? undefined : '4'}
                   strokeWidth="1"
                 />
               ))}
 
-              {/* Y-Axis Labels */}
-              <text x="0" y="22" fontSize="9" fill="#475569" fontFamily="monospace">100%</text>
-              <text x="4" y="84" fontSize="9" fill="#475569" fontFamily="monospace">50%</text>
-              <text x="8" y="152" fontSize="9" fill="#475569" fontFamily="monospace">0%</text>
+              {/* 3D Coordinate Axes (+X, +Y, +Z) */}
+              <line x1="46" y1="152" x2="496" y2="152" stroke="#e11d48" strokeWidth="1.3" />
+              <line x1="46" y1="152" x2="46" y2="18" stroke="#059669" strokeWidth="1.3" />
+              <line x1="46" y1="152" x2="60" y2="138" stroke="#2563eb" strokeWidth="1.3" />
+
+              {/* Y-Axis Labels (Right-aligned well clear of Ep1) */}
+              <text x="40" y="29" textAnchor="end" fontSize="11" fill="#334155" fontFamily="monospace" fontWeight="bold">100%</text>
+              <text x="40" y="90" textAnchor="end" fontSize="11" fill="#334155" fontFamily="monospace" fontWeight="bold">50%</text>
+              <text x="40" y="152" textAnchor="end" fontSize="11" fill="#334155" fontFamily="monospace" fontWeight="bold">0%</text>
+              <text x="50" y="12" fontSize="10" fontWeight="bold" fill="#047857" fontFamily="monospace">+Y: Score / Loss</text>
+              <text x="65" y="134" fontSize="10" fontWeight="bold" fill="#1d4ed8" fontFamily="monospace">+Z: Depth (±σ)</text>
+              <text x="8" y="168" fontSize="10" fill="#334155" fontFamily="monospace" fontWeight="bold">(0,0,0)</text>
+              <text x="498" y="155" fontSize="10" fontWeight="bold" fill="#be123c" fontFamily="monospace">+X</text>
 
               {/* Shaded +/- Std Deviation Confidence Band around Accuracy */}
               {bandPolygon && (
                 <polygon points={bandPolygon} fill="#10b981" fillOpacity="0.16" />
               )}
 
+              {/* 3D Extruded Depth Ribbons for Loss (Blue) and Accuracy (Emerald) */}
+              {history.length > 1 && (() => {
+                const dx = 12;
+                const dy = -11;
+                const lossPts = history.map((h, i) => ({ x: 48 + i * stepX, y: 150 - (h.loss / maxLoss) * 124 }));
+                const accPts = history.map((h, i) => ({ x: 48 + i * stepX, y: 150 - h.accuracy * 124 }));
+                const lossPoly = [
+                  ...lossPts.map((p) => `${p.x + dx},${p.y + dy}`),
+                  ...[...lossPts].reverse().map((p) => `${p.x},${p.y}`)
+                ].join(' ');
+                const accPoly = [
+                  ...accPts.map((p) => `${p.x + dx * 0.55},${p.y + dy * 0.55}`),
+                  ...[...accPts].reverse().map((p) => `${p.x},${p.y}`)
+                ].join(' ');
+                return (
+                  <>
+                    <polygon points={lossPoly} fill="#3b82f6" fillOpacity="0.22" />
+                    <polygon points={accPoly} fill="#10b981" fillOpacity="0.24" />
+                  </>
+                );
+              })()}
+
               {/* Loss curve (Blue) */}
               <path
-                d={`M ${history.map((h, i) => `${20 + i * stepX},${150 - (h.loss / maxLoss) * 130}`).join(' L ')}`}
+                d={`M ${history.map((h, i) => `${48 + i * stepX},${150 - (h.loss / maxLoss) * 124}`).join(' L ')}`}
                 fill="none"
                 stroke="#2563eb"
                 strokeWidth="3"
@@ -278,7 +335,7 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
 
               {/* Validation Accuracy curve (Maroon Dashed) */}
               <path
-                d={`M ${history.map((h, i) => `${20 + i * stepX},${150 - h.valAccuracy * 130}`).join(' L ')}`}
+                d={`M ${history.map((h, i) => `${48 + i * stepX},${150 - h.valAccuracy * 124}`).join(' L ')}`}
                 fill="none"
                 stroke="#9f1239"
                 strokeWidth="2.5"
@@ -287,7 +344,7 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
 
               {/* Training Accuracy curve (Emerald) */}
               <path
-                d={`M ${history.map((h, i) => `${20 + i * stepX},${150 - h.accuracy * 130}`).join(' L ')}`}
+                d={`M ${history.map((h, i) => `${48 + i * stepX},${150 - h.accuracy * 124}`).join(' L ')}`}
                 fill="none"
                 stroke="#059669"
                 strokeWidth="3"
@@ -295,10 +352,10 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
 
               {/* Data points + vertical error deviation whiskers */}
               {history.map((h, i) => {
-                const cx = 20 + i * stepX;
-                const cyAcc = 150 - h.accuracy * 130;
-                const cyVal = 150 - h.valAccuracy * 130;
-                const cyLoss = 150 - (h.loss / maxLoss) * 130;
+                const cx = 48 + i * stepX;
+                const cyAcc = 150 - h.accuracy * 124;
+                const cyVal = 150 - h.valAccuracy * 124;
+                const cyLoss = 150 - (h.loss / maxLoss) * 124;
                 const whisker = Math.max(4, Math.abs(cyAcc - cyVal));
                 return (
                   <g key={i}>
@@ -306,8 +363,95 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
                     <circle cx={cx} cy={cyLoss} r="4" fill="#2563eb" />
                     <circle cx={cx} cy={cyAcc} r="4.5" fill="#059669" />
                     <circle cx={cx} cy={cyVal} r="3.5" fill="#9f1239" />
-                    <text x={cx - 10} y="164" fontSize="9" fill="#475569" fontFamily="monospace">
+                    <text x={cx} y="176" textAnchor="middle" fontSize="9" fill="#475569" fontFamily="monospace">
                       Ep{h.epoch}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Per-Epoch 3D Validation Accuracy Bar Chart */}
+          <div className="bg-white p-3.5 rounded-xl border border-slate-300 space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-mono">
+              <span className="font-bold text-slate-900">3D Validation Accuracy Bar Chart (Per Epoch %)</span>
+              <span className="text-emerald-800 font-semibold">Final Val: {(last.valAccuracy * 100).toFixed(1)}%</span>
+            </div>
+            <svg viewBox="0 0 500 132" className="w-full h-32">
+              <polygon points="44,98 54,90 486,90 476,98" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.8" />
+              <line x1="54" y1="26" x2="486" y2="26" stroke="#e2e8f0" strokeDasharray="3 3" />
+              <line x1="54" y1="58" x2="486" y2="58" stroke="#e2e8f0" strokeDasharray="3 3" />
+              {/* 3D Axes */}
+              <line x1="44" y1="98" x2="480" y2="98" stroke="#e11d48" strokeWidth="1.2" />
+              <line x1="44" y1="98" x2="44" y2="18" stroke="#059669" strokeWidth="1.2" />
+              <line x1="44" y1="98" x2="54" y2="90" stroke="#2563eb" strokeWidth="1.2" />
+              <text x="38" y="30" textAnchor="end" fontSize="10" fill="#334155" fontFamily="monospace" fontWeight="bold">100%</text>
+              <text x="38" y="62" textAnchor="end" fontSize="10" fill="#334155" fontFamily="monospace" fontWeight="bold">50%</text>
+              <text x="38" y="99" textAnchor="end" fontSize="10" fill="#334155" fontFamily="monospace" fontWeight="bold">0%</text>
+              <text x="46" y="12" fontSize="9.5" fontWeight="bold" fill="#047857" fontFamily="monospace">+Y: Val %</text>
+              <text x="58" y="86" fontSize="9.5" fontWeight="bold" fill="#1d4ed8" fontFamily="monospace">+Z</text>
+              <text x="484" y="101" fontSize="9.5" fontWeight="bold" fill="#be123c" fontFamily="monospace">+X</text>
+              <text x="10" y="114" fontSize="9.5" fill="#334155" fontFamily="monospace" fontWeight="bold">(0,0,0)</text>
+              {history.map((h, i) => {
+                const slotW = 420 / Math.max(1, history.length);
+                const barW = Math.min(20, slotW * 0.54);
+                const bx = 50 + i * slotW + (slotW - barW) / 2;
+                const bh = Math.max(5, h.valAccuracy * 64);
+                const by = 96 - bh;
+                const dx = 7;
+                const dy = -6;
+                const isHigh = h.valAccuracy >= 0.92;
+                const frontCol = isHigh ? '#059669' : '#4f46e5';
+                const topCol = isHigh ? '#34d399' : '#818cf8';
+                const sideCol = isHigh ? '#065f46' : '#312e81';
+                const staggerY = i % 2 === 1 ? -10 : 0;
+                const labelY = by + dy - 4 + staggerY;
+                return (
+                  <g key={h.epoch}>
+                    <polygon
+                      points={`${bx},${by} ${bx + dx},${by + dy} ${bx + barW + dx},${by + dy} ${bx + barW},${by}`}
+                      fill={topCol}
+                    />
+                    <polygon
+                      points={`${bx + barW},${by} ${bx + barW + dx},${by + dy} ${bx + barW + dx},${by + bh + dy} ${bx + barW},${by + bh}`}
+                      fill={sideCol}
+                    />
+                    <rect x={bx} y={by} width={barW} height={bh} fill={frontCol} rx="1" />
+                    {i % 2 === 1 && (
+                      <line
+                        x1={bx + barW / 2 + dx * 0.4}
+                        y1={by + dy}
+                        x2={bx + barW / 2 + dx * 0.4}
+                        y2={labelY + 2}
+                        stroke="#94a3b8"
+                        strokeWidth="0.7"
+                        strokeDasharray="1.5 1.5"
+                      />
+                    )}
+                    <text
+                      x={bx + barW / 2 + dx * 0.4}
+                      y={labelY}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                      fill="#065f46"
+                      style={{ paintOrder: 'stroke' }}
+                      stroke="#ffffff"
+                      strokeWidth="2.5"
+                    >
+                      {(h.valAccuracy * 100).toFixed(0)}%
+                    </text>
+                    <text
+                      x={bx + barW / 2}
+                      y="119"
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fill="#64748b"
+                    >
+                      E{h.epoch}
                     </text>
                   </g>
                 );
@@ -388,9 +532,14 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
               <Gauge className="w-4 h-4 text-emerald-900" />
               <span>Run-Cycle Performance & Efficiency</span>
             </div>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold">
-              {project.performanceIndicators.latency}
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold">
+                P95: {project.performanceIndicators.latency}
+              </span>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 font-bold">
+                P99: {comparisons[0]?.p99Time}
+              </span>
+            </div>
           </div>
 
           <p className="text-xs text-slate-700 leading-relaxed">
@@ -444,40 +593,99 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
             <span className="text-[11px] font-mono text-rose-900 font-semibold">Ablation Benchmark</span>
           </div>
 
-          {/* Comparative Visual Bars */}
+          {/* 3D Dual-Pillar Comparative Visual Bar Chart */}
           <div className="bg-white p-4 rounded-xl border border-slate-300 space-y-3">
-            {comparisons.map((row, idx) => (
-              <div key={idx} className="space-y-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className={`font-bold ${row.isProposed ? 'text-blue-900' : 'text-slate-700'}`}>
-                    {row.model}
-                  </span>
-                  <div className="flex items-center gap-3 font-mono text-[11px]">
-                    <span className="text-emerald-900 font-bold">Acc: {row.accuracyPct}%</span>
-                    <span className="text-rose-900 font-semibold">{row.stdDev}</span>
-                    <span className="text-blue-900">Eff: {row.efficiencyPct}%</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden border border-slate-300">
-                    <div
-                      className={`h-full rounded-full ${
-                        row.isProposed ? 'bg-emerald-600' : 'bg-slate-400'
-                      }`}
-                      style={{ width: `${Math.min(100, row.accuracyPct)}%` }}
-                    />
-                  </div>
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden border border-slate-300">
-                    <div
-                      className={`h-full rounded-full ${
-                        row.isProposed ? 'bg-blue-700' : 'bg-slate-400'
-                      }`}
-                      style={{ width: `${row.efficiencyPct}%` }}
-                    />
-                  </div>
-                </div>
+            <div className="flex items-center justify-between text-[11px] font-mono">
+              <span className="font-bold text-slate-800">3D Dual-Metric Pillar Comparison (Accuracy vs Efficiency)</span>
+              <div className="flex items-center gap-3">
+                <span className="text-emerald-800 font-semibold">■ Accuracy %</span>
+                <span className="text-indigo-800 font-semibold">■ Efficiency %</span>
               </div>
-            ))}
+            </div>
+            <svg viewBox="0 0 490 142" className="w-full h-36">
+              <polygon points="46,106 56,98 468,98 458,106" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.8" />
+              <line x1="56" y1="28" x2="468" y2="28" stroke="#e2e8f0" strokeDasharray="3 3" />
+              <line x1="56" y1="64" x2="468" y2="64" stroke="#e2e8f0" strokeDasharray="3 3" />
+              {/* 3D Axes */}
+              <line x1="46" y1="106" x2="462" y2="106" stroke="#e11d48" strokeWidth="1.2" />
+              <line x1="46" y1="106" x2="46" y2="18" stroke="#059669" strokeWidth="1.2" />
+              <line x1="46" y1="106" x2="56" y2="98" stroke="#2563eb" strokeWidth="1.2" />
+              <text x="40" y="32" textAnchor="end" fontSize="8" fill="#475569" fontFamily="monospace">100%</text>
+              <text x="40" y="68" textAnchor="end" fontSize="8" fill="#475569" fontFamily="monospace">50%</text>
+              <text x="40" y="107" textAnchor="end" fontSize="8" fill="#475569" fontFamily="monospace">0%</text>
+              <text x="50" y="13" fontSize="7.5" fontWeight="bold" fill="#059669" fontFamily="monospace">+Y: %</text>
+              <text x="60" y="94" fontSize="7.5" fontWeight="bold" fill="#2563eb" fontFamily="monospace">+Z</text>
+              <text x="466" y="109" fontSize="7.5" fontWeight="bold" fill="#e11d48" fontFamily="monospace">+X</text>
+              <text x="10" y="122" fontSize="7.5" fill="#64748b" fontFamily="monospace">(0,0,0)</text>
+              {comparisons.map((row, idx) => {
+                const groupX = 78 + idx * 132;
+                const w = 22;
+                const dx = 7;
+                const dy = -6;
+                const accH = Math.max(6, (row.accuracyPct / 100) * 68);
+                const effH = Math.max(6, (row.efficiencyPct / 100) * 68);
+                const accY = 104 - accH;
+                const effY = 104 - effH;
+                const effX = groupX + 36;
+                return (
+                  <g key={idx}>
+                    {/* Accuracy 3D Bar */}
+                    <polygon
+                      points={`${groupX},${accY} ${groupX + dx},${accY + dy} ${groupX + w + dx},${accY + dy} ${groupX + w},${accY}`}
+                      fill={row.isProposed ? '#34d399' : '#cbd5e1'}
+                    />
+                    <polygon
+                      points={`${groupX + w},${accY} ${groupX + w + dx},${accY + dy} ${groupX + w + dx},${accY + accH + dy} ${groupX + w},${accY + accH}`}
+                      fill={row.isProposed ? '#065f46' : '#64748b'}
+                    />
+                    <rect x={groupX} y={accY} width={w} height={accH} fill={row.isProposed ? '#059669' : '#94a3b8'} rx="1" />
+                    <text
+                      x={groupX + w / 2 + 2}
+                      y={accY + dy - 4}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                      fill="#065f46"
+                      style={{ paintOrder: 'stroke' }}
+                      stroke="#ffffff"
+                      strokeWidth="2.5"
+                    >
+                      {row.accuracyPct}%
+                    </text>
+
+                    {/* Efficiency 3D Bar */}
+                    <polygon
+                      points={`${effX},${effY} ${effX + dx},${effY + dy} ${effX + w + dx},${effY + dy} ${effX + w},${effY}`}
+                      fill={row.isProposed ? '#818cf8' : '#e2e8f0'}
+                    />
+                    <polygon
+                      points={`${effX + w},${effY} ${effX + w + dx},${effY + dy} ${effX + w + dx},${effY + effH + dy} ${effX + w},${effY + effH}`}
+                      fill={row.isProposed ? '#312e81' : '#64748b'}
+                    />
+                    <rect x={effX} y={effY} width={w} height={effH} fill={row.isProposed ? '#4f46e5' : '#94a3b8'} rx="1" />
+                    <text
+                      x={effX + w / 2 + 2}
+                      y={effY + dy - 4}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                      fill="#312e81"
+                      style={{ paintOrder: 'stroke' }}
+                      stroke="#ffffff"
+                      strokeWidth="2.5"
+                    >
+                      {row.efficiencyPct}%
+                    </text>
+
+                    <text x={groupX + 30} y="128" textAnchor="middle" fontSize="8" fontFamily="monospace" fontWeight={row.isProposed ? 'bold' : 'normal'} fill={row.isProposed ? '#1e3a8a' : '#475569'}>
+                      {row.isProposed ? 'Proposed Stack' : row.model.slice(0, 18)}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
           </div>
 
           {/* Compact Quantitative Comparison Table */}
@@ -489,7 +697,8 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
                   <th className="py-2 px-3 font-bold">Accuracy</th>
                   <th className="py-2 px-3 font-bold">Loss</th>
                   <th className="py-2 px-3 font-bold">Deviation</th>
-                  <th className="py-2 px-3 font-bold">Cycle Latency</th>
+                  <th className="py-2 px-3 font-bold">P95 Latency</th>
+                  <th className="py-2 px-3 font-bold">P99 Tail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -505,6 +714,9 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
                     <td className="py-2 px-3 text-blue-900">{row.lossVal}</td>
                     <td className="py-2 px-3 text-rose-900">{row.stdDev}</td>
                     <td className="py-2 px-3 text-slate-900">{row.cycleTime}</td>
+                    <td className={`py-2 px-3 font-bold ${row.isProposed ? 'text-rose-900' : 'text-slate-700'}`}>
+                      {row.p99Time}
+                    </td>
                   </tr>
                 ))}
               </tbody>
