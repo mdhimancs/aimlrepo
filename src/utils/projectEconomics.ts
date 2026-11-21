@@ -22,23 +22,26 @@ export function formatInrCompact(amountUsd: number): string {
   const inr = amountUsd * USD_TO_INR;
   const abs = Math.abs(inr);
   if (abs >= 1_000_000_000) {
-    return `₹${(inr / 1_000_000_000).toFixed(2)}B`;
+    const b = inr / 1_000_000_000;
+    return `₹${Number(b.toFixed(2))}B`;
   }
   if (abs >= 10_000_000) {
-    return `₹${(inr / 10_000_000).toFixed(2)} Cr`;
+    const cr = inr / 10_000_000;
+    return `₹${Number(cr.toFixed(2))} Cr`;
   }
   if (abs >= 100_000) {
-    return `₹${(inr / 100_000).toFixed(2)} L`;
+    const l = inr / 100_000;
+    return `₹${Number(l.toFixed(2))} L`;
   }
   if (abs >= 1_000) {
-    return `₹${(inr / 1_000).toFixed(1)}K`;
+    const k = inr / 1_000;
+    return `₹${Number(k.toFixed(1))}K`;
   }
-  return `₹${Math.round(inr).toLocaleString('en-IN')}`;
+  return `₹${Math.round(inr)}`;
 }
 
 export function formatInrExact(amountUsd: number): string {
-  const inr = amountUsd * USD_TO_INR;
-  return `₹${Math.round(inr).toLocaleString('en-IN')}`;
+  return formatInrCompact(amountUsd);
 }
 
 export const formatUsdCompact = formatInrCompact;

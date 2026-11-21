@@ -2,5 +2,7 @@
   "name": "ScholarML Enterprise AI & Research Studio",
   "description": "Executive-grade platform for researching, building, training, and executing state-of-the-art AI, ML, Cybersecurity, and UIDAI DPI projects with RAG and synthetic data pipelines.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
