@@ -255,7 +255,7 @@ class EquivariantGNNBlock(nn.Module):
       methodology: 'Spatial graph construction is accelerated using Rust k-d trees, reducing CPU preprocessing bottlenecks by 85% for large macromolecular complexes.',
       architecture: 'Distributed Rust preprocessing workers feeding PyTorch Geometric GPU training pipelines.',
       benchmarks: 'Tested on CASP14 target sequences. Achieved average GDT score of 91.2 and backbone RMSD of 1.24 Å with 1,400 residues/sec throughput.',
-      productionConsiderations: 'High-throughput HPC cluster execution with MPI parallelization for screening virtual chemical libraries of over 10 billion compounds.'
+      productionConsiderations: 'High-throughput HPC cluster execution with MPI parallelization for screening virtual chemical libraries valued at over ₹83,500 Cr.'
     }
   },
   {
@@ -2156,15 +2156,7 @@ ${p.code}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'showcase' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
           >
             <LayoutDashboard className="w-4 h-4 shrink-0" />
-            <span>Research Projects</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('repository')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'repository' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
-          >
-            <Database className="w-4 h-4 shrink-0" />
-            <span>ML Case Studies</span>
+            <span>Storyboard</span>
           </button>
 
           <button 
@@ -2181,6 +2173,14 @@ ${p.code}
           >
             <LineChart className="w-4 h-4 shrink-0" />
             <span>ML Simulator</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('repository')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'repository' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+          >
+            <Database className="w-4 h-4 shrink-0" />
+            <span>ML Case Studies</span>
           </button>
 
           <button 
@@ -2321,7 +2321,7 @@ ${p.code}
                       <span>Production AI, Cybersecurity &amp; UIDAI DPI Research Engine</span>
                     </div>
                     <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2 tracking-tight">
-                      Flagship AI/ML Research &amp; Cases studies
+                      AI/ML Research &amp; Cases studies
                     </h1>
                     <p className="text-slate-600 text-base leading-relaxed">
                       Production-ready reference implementations featuring Training Convergence Charts, Sample Data Distributions, Architecture Topologies, and Rust-accelerated pipelines.
@@ -2346,48 +2346,6 @@ ${p.code}
                 </div>
               </div>
 
-              {/* Executive KPI Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-xs text-slate-500 font-mono block">Active Research Models</span>
-                    <span className="text-xl font-bold text-slate-900">{researchProjects.length} SOTA Specs</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700">
-                    <Cpu className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-xs text-slate-500 font-mono block">RAG Knowledge Store</span>
-                    <span className="text-xl font-bold text-slate-900">FAISS + Gemini</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
-                    <Database className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-xs text-slate-500 font-mono block">Inference Engine</span>
-                    <span className="text-xl font-bold text-slate-900">Rust Zero-Copy</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
-                    <Zap className="w-5 h-5" />
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-xs text-slate-500 font-mono block">Curated Video Library</span>
-                    <span className="text-xl font-bold text-slate-900">20 Masterclasses</span>
-                  </div>
-                  <div className="w-10 h-10 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700">
-                    <GraduationCap className="w-5 h-5" />
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
@@ -2469,8 +2427,10 @@ ${p.code}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {ALL_REPOSITORY_PROJECTS
                   .filter(proj => {
+                    const isStarred = starredRepoIds.includes(proj.id);
+                    if (!starredOnlyFilter && !isStarred) return false;
                     const matchesLevel = repoFilter === 'All' || proj.difficulty === repoFilter;
-                    const matchesStarred = !starredOnlyFilter || starredRepoIds.includes(proj.id);
+                    const matchesStarred = !starredOnlyFilter || isStarred;
                     const matchesSearch = !repoSearch || 
                       proj.title.toLowerCase().includes(repoSearch.toLowerCase()) ||
                       proj.domain.toLowerCase().includes(repoSearch.toLowerCase()) ||

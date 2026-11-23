@@ -961,6 +961,7 @@ export default function LearningSectionTab() {
           {filteredModules.map((module) => {
             const isSelected = activeVideo.id === module.id;
             const isWatched = watchedIds.includes(module.id);
+            const isCompact30 = module.id === 'ds-foundations-python';
 
             return (
               <div
@@ -970,13 +971,19 @@ export default function LearningSectionTab() {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 title={module.title}
-                className={`cursor-pointer rounded-xl bg-slate-100 border p-2.5 transition-all duration-200 hover:bg-slate-200 hover:shadow-md flex flex-col justify-between ${
+                className={`cursor-pointer rounded-xl bg-slate-100 border transition-all duration-200 hover:bg-slate-200 hover:shadow-md flex flex-col justify-between ${
+                  isCompact30 ? 'w-[70%] justify-self-center self-start p-1.5' : 'p-2.5'
+                } ${
                   isSelected ? 'border-indigo-600 ring-2 ring-indigo-600/25 bg-slate-200' : 'border-slate-300'
                 }`}
               >
                 <div>
                   {/* Thumbnail */}
-                  <div className="relative rounded-lg overflow-hidden bg-slate-900 border border-slate-300 aspect-video mb-2 group">
+                  <div
+                    className={`relative rounded-lg overflow-hidden bg-slate-900 border border-slate-300 group ${
+                      isCompact30 ? 'h-14 w-full mb-1' : 'aspect-video mb-2'
+                    }`}
+                  >
                     <img
                       src={`https://img.youtube.com/vi/${module.youtubeId}/hqdefault.jpg`}
                       alt={module.title}
@@ -984,34 +991,58 @@ export default function LearningSectionTab() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute inset-0 bg-slate-900/20 group-hover:bg-slate-900/10 transition-colors flex items-center justify-center">
-                      <div className="rounded-full bg-white/95 shadow-xs w-[23px] h-5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <div
+                        className={`rounded-full bg-white/95 shadow-xs flex items-center justify-center group-hover:scale-110 transition-transform ${
+                          isCompact30 ? 'w-4 h-4' : 'w-[23px] h-5'
+                        }`}
+                      >
                         <Play
-                          className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600 ml-0.5"
+                          className={`text-indigo-600 fill-indigo-600 ml-0.5 ${
+                            isCompact30 ? 'w-2.5 h-2.5' : 'w-2.5 h-2.5'
+                          }`}
                           style={{ transform: 'scaleX(1.15)' }}
                         />
                       </div>
                     </div>
-                    <span className="absolute bottom-0.5 right-0.5 rounded bg-slate-900/85 text-white font-mono text-[9px] px-1.5 py-0.5 font-semibold">
+                    <span
+                      className={`absolute bottom-0.5 right-0.5 rounded bg-slate-900/85 text-white font-mono font-semibold ${
+                        isCompact30 ? 'px-1 py-0 text-[7px]' : 'px-1.5 py-0.5 text-[9px]'
+                      }`}
+                    >
                       {module.duration}
                     </span>
-                    <span className="absolute top-0.5 left-0.5 rounded bg-indigo-700 text-white font-mono text-[9px] px-1.5 py-0.5 font-bold shadow-xs">
+                    <span
+                      className={`absolute top-0.5 left-0.5 rounded bg-indigo-700 text-white font-mono font-bold shadow-xs ${
+                        isCompact30 ? 'px-1 py-0 text-[7px]' : 'px-1.5 py-0.5 text-[9px]'
+                      }`}
+                    >
                       P{module.phaseNumber}
                     </span>
                     {isWatched && (
-                      <span className="absolute top-0.5 right-0.5 rounded bg-emerald-600 text-white text-[9px] px-1.5 py-0.5 font-semibold flex items-center gap-0.5 shadow-xs">
-                        <CheckCircle2 className="w-2.5 h-2.5" />
+                      <span
+                        className={`absolute top-0.5 right-0.5 rounded bg-emerald-600 text-white font-semibold flex items-center gap-0.5 shadow-xs ${
+                          isCompact30 ? 'px-1 py-0 text-[7px]' : 'px-1.5 py-0.5 text-[9px]'
+                        }`}
+                      >
+                        <CheckCircle2 className={isCompact30 ? 'w-2 h-2' : 'w-2.5 h-2.5'} />
                         <span>Done</span>
                       </span>
                     )}
                   </div>
 
                   {/* Phase Badge + Level */}
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[10px] font-semibold text-blue-900 uppercase tracking-wider truncate">
+                  <div className={`flex items-center justify-between gap-1 ${isCompact30 ? 'mb-0.5' : 'mb-1'}`}>
+                    <span
+                      className={`font-semibold text-blue-900 uppercase tracking-wider truncate ${
+                        isCompact30 ? 'text-[7.5px]' : 'text-[10px]'
+                      }`}
+                    >
                       {module.phase.replace(/^Phase \d+: /, '')}
                     </span>
                     <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded font-medium border shrink-0 ${
+                      className={`rounded font-medium border shrink-0 ${
+                        isCompact30 ? 'text-[7px] px-1 py-0' : 'text-[9px] px-1.5 py-0.5'
+                      } ${
                         module.level === 'Beginner'
                           ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                           : module.level === 'Intermediate'
@@ -1023,46 +1054,75 @@ export default function LearningSectionTab() {
                     </span>
                   </div>
 
-                  <h3 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mb-1">
+                  <h3
+                    className={`font-bold text-slate-900 leading-tight ${
+                      isCompact30 ? 'text-[9px] line-clamp-1 mb-0.5' : 'text-xs leading-snug line-clamp-2 mb-1'
+                    }`}
+                  >
                     {module.title}
                   </h3>
-                  <p className="text-[10px] font-semibold text-indigo-700 mb-1 truncate">{module.channel}</p>
-                  <p className="text-[10px] text-slate-600 leading-relaxed line-clamp-1 mb-2">{module.summary}</p>
+                  {!isCompact30 && (
+                    <>
+                      <p className="text-[10px] font-semibold text-indigo-700 mb-1 truncate">{module.channel}</p>
+                      <p className="text-[10px] text-slate-600 leading-relaxed line-clamp-1 mb-2">{module.summary}</p>
+                    </>
+                  )}
                 </div>
 
-                <div className="space-y-1.5 pt-1.5 border-t border-slate-300">
-                  <div className="flex flex-wrap gap-1">
-                    {module.tags.slice(0, 2).map((tag) => (
-                      <span
-                        key={tag}
-                        className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-slate-200 text-slate-800 border border-slate-300"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px]">
+                {isCompact30 ? (
+                  <div className="pt-1 border-t border-slate-300 flex items-center justify-between text-[8px]">
+                    <span className="px-1 py-0 rounded font-mono bg-slate-200 text-slate-800 border border-slate-300">
+                      {module.tags[0]}
+                    </span>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleWatched(module.id);
                       }}
-                      className={`inline-flex items-center gap-1 font-semibold transition-colors ${
+                      className={`inline-flex items-center gap-0.5 font-semibold transition-colors ${
                         isWatched ? 'text-emerald-800 hover:text-emerald-950' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <CheckSquare className="w-3 h-3" />
+                      <CheckSquare className="w-2.5 h-2.5" />
                       <span>{isWatched ? 'Done' : 'Mark'}</span>
                     </button>
-
-                    <span className="text-blue-900 font-semibold flex items-center gap-0.5">
-                      <BookOpen className="w-3 h-3" />
-                      <span>{isSelected ? 'Playing' : 'Study'}</span>
-                    </span>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-1.5 pt-1.5 border-t border-slate-300">
+                    <div className="flex flex-wrap gap-1">
+                      {module.tags.slice(0, 2).map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[9px] px-1.5 py-0.5 rounded font-mono bg-slate-200 text-slate-800 border border-slate-300"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px]">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleWatched(module.id);
+                        }}
+                        className={`inline-flex items-center gap-1 font-semibold transition-colors ${
+                          isWatched ? 'text-emerald-800 hover:text-emerald-950' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <CheckSquare className="w-3 h-3" />
+                        <span>{isWatched ? 'Done' : 'Mark'}</span>
+                      </button>
+
+                      <span className="text-blue-900 font-semibold flex items-center gap-0.5">
+                        <BookOpen className="w-3 h-3" />
+                        <span>{isSelected ? 'Playing' : 'Study'}</span>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
