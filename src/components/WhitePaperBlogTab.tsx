@@ -208,7 +208,7 @@ export default function WhitePaperBlogTab({
   const [filterMode, setFilterMode] = useState<FilterMode>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItemId, setSelectedItemId] = useState<string>(
-    flagshipProjects[0]?.id || ENGINEERING_BLOG_POSTS[0].id
+    flagshipProjects[0]?.id || datacampProjects[0]?.id || ENGINEERING_BLOG_POSTS[0].id
   );
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedCodeBlock, setCopiedCodeBlock] = useState<string | null>(null);

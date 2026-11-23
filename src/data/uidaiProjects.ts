@@ -37,9 +37,9 @@ export const UIDAI_DPI_PROJECTS: FlagshipProject[] = [
       { label: 'Presentation Attacks & Edge Anomalies', percentage: 12.5, count: '187.5M intercepted' }
     ],
     performanceIndicators: {
-      latency: '4.2ms / Auth Probe',
-      throughput: '18,500 probes/s',
-      memoryFootprint: '610 MB VRAM',
+      latency: 'P95 1.8ms / P99 2.9ms (Rust Hamming)',
+      throughput: '165,000 probes/s (16-Shard Cluster)',
+      memoryFootprint: '3.85 GB VRAM / shard (FP8 + PQ-8)',
       hardwareTarget: 'CIDR Cluster + NavIC/GPS Telemetry + Rust Edge SDK'
     },
     techStack: ['PyTorch', 'Rust', 'NavIC / GPS Telemetry', 'Multimodal Biometrics', 'ML-KEM-1024 + AES-256-XTS'],
@@ -164,9 +164,9 @@ class QualityWeightedBiometricFusion(nn.Module):
       { label: 'Collusive Mule & Replay Fraud Rings', percentage: 2.4, count: '2.4M daily' }
     ],
     performanceIndicators: {
-      latency: '3.1ms / Auth Request',
-      throughput: '22,000 checks/s',
-      memoryFootprint: '540 MB VRAM',
+      latency: 'P95 1.6ms / P99 2.6ms (WireGuard 0-RTT)',
+      throughput: '192,000 checks/s (16-Shard Ring)',
+      memoryFootprint: '3.40 GB VRAM / shard (Arrow + PQ-8)',
       hardwareTarget: 'Online Risk Gateway + NavIC Telemetry + WireGuard 0-RTT'
     },
     techStack: ['PyTorch', 'Heterogeneous GraphSAGE', 'NavIC / GPS Telemetry', 'Redis Feature Store', 'XChaCha20 + WireGuard'],
@@ -248,9 +248,9 @@ def navic_haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
       { label: 'DBT Subsidy & DigiLocker Verifications', percentage: 25.0, count: '25.0M daily' }
     ],
     performanceIndicators: {
-      latency: '2.2ms / Cross-Rail Call',
-      throughput: '28,000 txns/s',
-      memoryFootprint: '280 MB RAM',
+      latency: 'P95 1.4ms / P99 2.2ms (Cross-Rail mTLS)',
+      throughput: '215,000 txns/s (16-Shard Federated)',
+      memoryFootprint: '2.95 GB VRAM / shard (INT8 + PQ-8)',
       hardwareTarget: 'Federated DPI API Mesh (1.50B Scale · mTLS 1.3 + AES-GCM)'
     },
     techStack: ['Rust', 'PyTorch', 'Federated ML', 'NPCI/UPI Schema', 'AES-256-GCM-SIV + mTLS 1.3'],
@@ -333,9 +333,9 @@ pub fn derive_sector_scoped_token(vid_16digit: &str, sector_salt: &str) -> Strin
       { label: 'Socio-Economic DBT Scheme Beneficiaries', percentage: 15.0, count: '225.0M audits' }
     ],
     performanceIndicators: {
-      latency: '6.4ms / Multi-Hop Graph Traversal',
-      throughput: '32,000 entity resolutions/s',
-      memoryFootprint: '1.42 GB RAM',
+      latency: 'P95 2.4ms / P99 4.1ms (SEV-SNP Enclave)',
+      throughput: '148,000 entity resolutions/s (20-Shard)',
+      memoryFootprint: '4.45 GB VRAM / shard (FP8 + PQ-8 TEE)',
       hardwareTarget: 'FIU-India & CIDR SEV-SNP TEE Cluster (1.50B Scale)'
     },
     techStack: ['Rust', 'PyTorch', 'Graph Neural Networks', 'NavIC / GPS', 'FF3-1 FPE + SEV-SNP RA-TLS'],

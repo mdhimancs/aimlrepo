@@ -6,6 +6,7 @@ import {
   MlTechniqueId,
   SYNTHETIC_DATA_TYPE_META
 } from '../utils/syntheticDataset';
+import { CHART_COLORS, CHART_FONTS } from '../utils/chartTheme';
 
 interface TrainingLogPoint {
   epoch: number;
@@ -69,15 +70,16 @@ function Bar3D({
   y,
   w,
   h,
-  dx = 7,
-  dy = -5,
+  dx = 9,
+  dy = -7,
   frontColor,
   topColor,
   sideColor,
   label,
+  labelColor = '#065f46',
   labelOffsetY = 0,
   xLabel,
-  subY = 184
+  subY = 224
 }: {
   x: number;
   y: number;
@@ -89,6 +91,7 @@ function Bar3D({
   topColor: string;
   sideColor: string;
   label?: string;
+  labelColor?: string;
   labelOffsetY?: number;
   xLabel?: string;
   subY?: number;
@@ -96,12 +99,12 @@ function Bar3D({
   const topPts = `${x},${y} ${x + dx},${y + dy} ${x + w + dx},${y + dy} ${x + w},${y}`;
   const sidePts = `${x + w},${y} ${x + w + dx},${y + dy} ${x + w + dx},${y + h + dy} ${x + w},${y + h}`;
   const labelX = x + w / 2 + dx * 0.45;
-  const labelY = Math.max(12, y + dy - 5 + labelOffsetY);
+  const labelY = Math.max(18, y + dy - 6 + labelOffsetY);
   return (
     <g>
       <polygon points={topPts} fill={topColor} />
       <polygon points={sidePts} fill={sideColor} />
-      <rect x={x} y={y} width={w} height={h} fill={frontColor} rx="1" />
+      <rect x={x} y={y} width={w} height={h} fill={frontColor} rx="1.5" />
       {label && (
         <>
           {labelOffsetY < -4 && (
@@ -109,21 +112,21 @@ function Bar3D({
               x1={labelX}
               y1={y + dy - 1}
               x2={labelX}
-              y2={labelY + 2}
+              y2={labelY + 3}
               stroke="#64748b"
-              strokeWidth="0.6"
-              strokeDasharray="1.5 1.5"
+              strokeWidth="0.9"
+              strokeDasharray="2 2"
             />
           )}
           <text
             x={labelX}
             y={labelY}
             textAnchor="middle"
-            fontSize="7.5"
-            fontFamily="monospace"
-            fontWeight="bold"
-            fill="#065f46"
-            style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '2.6px', strokeLinejoin: 'round' }}
+            fontSize="11.5"
+            fontFamily={CHART_FONTS.mono}
+            fontWeight="700"
+            fill={labelColor}
+            style={{ paintOrder: 'stroke', stroke: '#ffffff', strokeWidth: '3.5px', strokeLinejoin: 'round' }}
           >
             {label}
           </text>
@@ -134,10 +137,11 @@ function Bar3D({
           x={x + w / 2}
           y={subY}
           textAnchor="middle"
-          fontSize="8.2"
-          fontFamily="monospace"
-          fill="#475569"
-          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '2px' }}
+          fontSize="11.5"
+          fontFamily={CHART_FONTS.mono}
+          fontWeight="600"
+          fill={CHART_COLORS.tickText}
+          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '2.5px' }}
         >
           {xLabel}
         </text>
@@ -256,8 +260,8 @@ export default function SimulatorMultiModalCharts({
     for (let gy = 0; gy < 4; gy++) {
       for (let gz = 0; gz < 3; gz++) {
         const act = Math.min(1, Math.abs(Math.sin(gx * 0.9 + gy * 0.7 + gz * 1.1)) * 0.75 + rand() * 0.25);
-        const p = project3D((gx - 1.5) * 1.2, (gy - 1.5) * 1.05, (gz - 1) * 1.2, yawDeg, pitchDeg, 185, 102, 20);
-        voxels3D.push({ x: gx, y: gy, z: gz, act, depth: p.depth, px: p.px, py: p.py, size: 7.5 + act * 6.5 });
+        const p = project3D((gx - 1.5) * 1.25, (gy - 1.5) * 1.1, (gz - 1) * 1.25, yawDeg, pitchDeg, 232, 132, 26);
+        voxels3D.push({ x: gx, y: gy, z: gz, act, depth: p.depth, px: p.px, py: p.py, size: 9.5 + act * 8 });
       }
     }
   }
@@ -319,7 +323,7 @@ export default function SimulatorMultiModalCharts({
         dataType={dataType}
         epochPoints={epochHistoryFor3D}
         initialMode="loss_surface"
-        heightClass="h-[420px]"
+        heightClass="h-[460px]"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -327,48 +331,51 @@ export default function SimulatorMultiModalCharts({
         <div className="rounded-2xl bg-white border border-slate-300 p-5 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-base font-bold text-slate-900">
                 1. 3D Validation Accuracy Bar Chart (Per Epoch)
               </h4>
-              <p className="text-[11px] font-mono text-slate-500">
+              <p className="text-xs font-mono text-slate-600">
                 X: Epoch · Y: Val Acc % · Z: Extruded Depth · SLA ≥ 95.0%
               </p>
             </div>
-            <span className="text-[11px] font-mono text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold">
+            <span className="text-xs font-mono text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 font-bold tabular-nums">
               Latest Val: {epochBars[epochBars.length - 1]?.valPct}%
             </span>
           </div>
 
-          <svg viewBox="0 0 540 212" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
-            {/* 3D Isometric Floor Plane & Back Wall */}
-            <polygon points="54,170 72,156 520,156 502,170" fill="#e2e8f0" />
-            {/* 3D Axis Rays from Origin (54, 170) */}
-            <line x1="54" y1="170" x2="508" y2="170" stroke="#be123c" strokeWidth="1.2" />
-            <line x1="54" y1="170" x2="54" y2="28" stroke="#059669" strokeWidth="1.2" />
-            <line x1="54" y1="170" x2="72" y2="156" stroke="#1d4ed8" strokeWidth="1.2" />
-            <text x="56" y="22" fontSize="8" fontFamily="monospace" fontWeight="bold" fill="#065f46">+Y: Val %</text>
-            <text x="488" y="198" fontSize="8" fontFamily="monospace" fontWeight="bold" fill="#9f1239" textAnchor="end">+X: Epoch (Z=Depth)</text>
+          <svg viewBox="0 0 580 250" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
+            {/* 3D Isometric Floor Plane */}
+            <polygon points="62,196 80,180 554,180 536,196" fill={CHART_COLORS.stageFloor} stroke={CHART_COLORS.stageStroke} strokeWidth="0.9" />
+            {/* 3D Axis Rays from Origin (62, 196) */}
+            <line x1="62" y1="196" x2="546" y2="196" stroke={CHART_COLORS.axisX} strokeWidth="1.5" />
+            <line x1="62" y1="196" x2="62" y2="30" stroke={CHART_COLORS.axisY} strokeWidth="1.5" />
+            <line x1="62" y1="196" x2="80" y2="180" stroke={CHART_COLORS.axisZ} strokeWidth="1.5" />
+            <text x="68" y="22" fontSize="11.5" fontFamily={CHART_FONTS.sans} fontWeight="700" fill={CHART_COLORS.axisYLabel}>
+              +Y: Val Accuracy (%)
+            </text>
+            <text x="546" y="242" fontSize="11.5" fontFamily={CHART_FONTS.sans} fontWeight="700" fill={CHART_COLORS.axisXLabel} textAnchor="end">
+              +X: Epoch (Z=Depth)
+            </text>
 
             {[25, 50, 75, 100].map((pct) => {
-              const y = 168 - (pct / 100) * 124;
+              const y = 192 - (pct / 100) * 144;
               return (
                 <g key={pct}>
-                  <line x1="54" y1={y} x2="504" y2={y} stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <text x="46" y={y + 3} textAnchor="end" fontSize="8.5" fill="#64748b" fontFamily="monospace">
+                  <line x1="62" y1={y} x2="542" y2={y} stroke={CHART_COLORS.gridLine} strokeDasharray="4 4" />
+                  <text x="53" y={y + 4} textAnchor="end" fontSize="12" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="600">
                     {pct}%
                   </text>
                 </g>
               );
             })}
             {epochBars.map((b, idx) => {
-              const slotW = 434 / Math.max(1, epochBars.length);
-              const barW = Math.min(22, slotW * 0.54);
-              const x = 62 + idx * slotW + (slotW - barW) / 2;
-              const barH = Math.max(6, (b.valPct / 100) * 124);
-              const y = 168 - barH;
+              const slotW = 460 / Math.max(1, epochBars.length);
+              const barW = Math.min(28, slotW * 0.56);
+              const x = 72 + idx * slotW + (slotW - barW) / 2;
+              const barH = Math.max(8, (b.valPct / 100) * 144);
+              const y = 192 - barH;
               const isHigh = b.valPct >= 95;
-              // Stagger adjacent top value labels vertically so numbers never overlap horizontally
-              const staggerY = epochBars.length > 7 && idx % 2 === 1 ? -11 : 0;
+              const staggerY = epochBars.length > 7 && idx % 2 === 1 ? -15 : 0;
               return (
                 <Bar3D
                   key={b.epoch}
@@ -376,15 +383,16 @@ export default function SimulatorMultiModalCharts({
                   y={y}
                   w={barW}
                   h={barH}
-                  dx={7}
-                  dy={-5}
-                  frontColor={isHigh ? '#059669' : '#4f46e5'}
-                  topColor={isHigh ? '#34d399' : '#818cf8'}
-                  sideColor={isHigh ? '#065f46' : '#312e81'}
+                  dx={9}
+                  dy={-7}
+                  frontColor={isHigh ? CHART_COLORS.emeraldFront : CHART_COLORS.indigoFront}
+                  topColor={isHigh ? CHART_COLORS.emeraldTop : CHART_COLORS.indigoTop}
+                  sideColor={isHigh ? CHART_COLORS.emeraldSide : CHART_COLORS.indigoSide}
                   label={epochBars.length <= 14 ? `${b.valPct}` : undefined}
+                  labelColor={isHigh ? '#065f46' : '#312e81'}
                   labelOffsetY={staggerY}
                   xLabel={`E${b.epoch}`}
-                  subY={186}
+                  subY={220}
                 />
               );
             })}
@@ -395,44 +403,48 @@ export default function SimulatorMultiModalCharts({
         <div className="rounded-2xl bg-white border border-slate-300 p-5 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-base font-bold text-slate-900">
                 2. 3D Val Accuracy Bar Chart Across ML Techniques
               </h4>
-              <p className="text-[11px] font-mono text-slate-500">
+              <p className="text-xs font-mono text-slate-600">
                 X: ML Model · Y: Acc [70..100%] · Z: Depth · Click Pillar to Run
               </p>
             </div>
-            <span className="text-[11px] font-mono text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+            <span className="text-xs font-mono text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded border border-indigo-200 font-semibold">
               5-Model 3D XYZ
             </span>
           </div>
 
-          <svg viewBox="0 0 540 212" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
-            <polygon points="54,170 76,154 520,154 498,170" fill="#e2e8f0" />
-            <line x1="54" y1="170" x2="508" y2="170" stroke="#be123c" strokeWidth="1.2" />
-            <line x1="54" y1="170" x2="54" y2="28" stroke="#059669" strokeWidth="1.2" />
-            <line x1="54" y1="170" x2="76" y2="154" stroke="#1d4ed8" strokeWidth="1.2" />
-            <text x="56" y="22" fontSize="8" fontFamily="monospace" fontWeight="bold" fill="#065f46">+Y: Val %</text>
-            <text x="492" y="199" fontSize="8" fontFamily="monospace" fontWeight="bold" fill="#9f1239" textAnchor="end">+X: ML Technique (Z=Depth)</text>
+          <svg viewBox="0 0 580 250" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
+            <polygon points="62,196 84,178 554,178 532,196" fill={CHART_COLORS.stageFloor} stroke={CHART_COLORS.stageStroke} strokeWidth="0.9" />
+            <line x1="62" y1="196" x2="546" y2="196" stroke={CHART_COLORS.axisX} strokeWidth="1.5" />
+            <line x1="62" y1="196" x2="62" y2="30" stroke={CHART_COLORS.axisY} strokeWidth="1.5" />
+            <line x1="62" y1="196" x2="84" y2="178" stroke={CHART_COLORS.axisZ} strokeWidth="1.5" />
+            <text x="68" y="22" fontSize="11.5" fontFamily={CHART_FONTS.sans} fontWeight="700" fill={CHART_COLORS.axisYLabel}>
+              +Y: Val Accuracy (%)
+            </text>
+            <text x="546" y="242" fontSize="11.5" fontFamily={CHART_FONTS.sans} fontWeight="700" fill={CHART_COLORS.axisXLabel} textAnchor="end">
+              +X: ML Technique (Z=Depth)
+            </text>
 
             {[75, 85, 95, 100].map((pct) => {
-              const y = 168 - ((pct - 70) / 30) * 124;
+              const y = 192 - ((pct - 70) / 30) * 144;
               return (
                 <g key={pct}>
-                  <line x1="54" y1={y} x2="504" y2={y} stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <text x="46" y={y + 3} textAnchor="end" fontSize="8.5" fill="#64748b" fontFamily="monospace">
+                  <line x1="62" y1={y} x2="542" y2={y} stroke={CHART_COLORS.gridLine} strokeDasharray="4 4" />
+                  <text x="53" y={y + 4} textAnchor="end" fontSize="12" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="600">
                     {pct}%
                   </text>
                 </g>
               );
             })}
             {mlTechBars.map((tb, idx) => {
-              const slotW = 432 / mlTechBars.length;
-              const barW = 44;
-              const x = 64 + idx * slotW + (slotW - barW) / 2;
-              const barH = Math.max(12, ((tb.valPct - 70) / 30) * 124);
-              const y = 168 - barH;
-              const staggerY = idx % 2 === 1 ? -9 : 0;
+              const slotW = 460 / mlTechBars.length;
+              const barW = 48;
+              const x = 74 + idx * slotW + (slotW - barW) / 2;
+              const barH = Math.max(14, ((tb.valPct - 70) / 30) * 144);
+              const y = 192 - barH;
+              const staggerY = idx % 2 === 1 ? -14 : 0;
               return (
                 <g
                   key={tb.id}
@@ -444,15 +456,16 @@ export default function SimulatorMultiModalCharts({
                     y={y}
                     w={barW}
                     h={barH}
-                    dx={10}
-                    dy={-7}
-                    frontColor={tb.active ? '#4f46e5' : '#059669'}
-                    topColor={tb.active ? '#818cf8' : '#34d399'}
-                    sideColor={tb.active ? '#312e81' : '#065f46'}
+                    dx={12}
+                    dy={-8}
+                    frontColor={tb.active ? CHART_COLORS.indigoFront : CHART_COLORS.emeraldFront}
+                    topColor={tb.active ? CHART_COLORS.indigoTop : CHART_COLORS.emeraldTop}
+                    sideColor={tb.active ? CHART_COLORS.indigoSide : CHART_COLORS.emeraldSide}
                     label={`${tb.valPct}%${tb.active ? ' ★' : ''}`}
+                    labelColor={tb.active ? '#312e81' : '#065f46'}
                     labelOffsetY={staggerY}
                     xLabel={tb.shortName}
-                    subY={186}
+                    subY={220}
                   />
                 </g>
               );
@@ -464,23 +477,23 @@ export default function SimulatorMultiModalCharts({
         <div className="rounded-2xl bg-white border border-slate-300 p-5 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-base font-bold text-slate-900">
                 3. 3D Time-Series Forecasting Ribbon (X:Time · Y:Load · Z:σ-Band)
               </h4>
-              <p className="text-[11px] font-mono text-slate-500">
+              <p className="text-xs font-mono text-slate-600">
                 3D XYZ Coordinate Frame · Forecast Curtain [t-6..t+11] · Peak Anomaly Callouts
               </p>
             </div>
-            <span className="text-[11px] font-mono text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+            <span className="text-xs font-mono text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded border border-indigo-200 font-semibold">
               3D XYZ Ribbon
             </span>
           </div>
 
-          <svg viewBox="0 0 380 210" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
+          <svg viewBox="0 0 460 265" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
             {(() => {
-              const cx = 192;
-              const cy = 114;
-              const sc = 22;
+              const cx = 232;
+              const cy = 142;
+              const sc = 27;
               const origin = project3D(-3.8, -1.3, -1.6, yawDeg, pitchDeg, cx, cy, sc);
               const xEnd = project3D(4.2, -1.3, -1.6, yawDeg, pitchDeg, cx, cy, sc);
               const yEnd = project3D(-3.8, 2.5, -1.6, yawDeg, pitchDeg, cx, cy, sc);
@@ -499,19 +512,19 @@ export default function SimulatorMultiModalCharts({
               return (
                 <>
                   {/* 3D Coordinate Axes */}
-                  <line x1={origin.px} y1={origin.py} x2={xEnd.px} y2={xEnd.py} stroke="#be123c" strokeWidth="1.2" />
-                  <line x1={origin.px} y1={origin.py} x2={yEnd.px} y2={yEnd.py} stroke="#059669" strokeWidth="1.2" />
-                  <line x1={origin.px} y1={origin.py} x2={zEnd.px} y2={zEnd.py} stroke="#1d4ed8" strokeWidth="1.2" />
-                  <text x={origin.px - 6} y={origin.py + 10} textAnchor="end" fontSize="7.5" fontFamily="monospace" fill="#475569">
+                  <line x1={origin.px} y1={origin.py} x2={xEnd.px} y2={xEnd.py} stroke={CHART_COLORS.axisX} strokeWidth="1.6" />
+                  <line x1={origin.px} y1={origin.py} x2={yEnd.px} y2={yEnd.py} stroke={CHART_COLORS.axisY} strokeWidth="1.6" />
+                  <line x1={origin.px} y1={origin.py} x2={zEnd.px} y2={zEnd.py} stroke={CHART_COLORS.axisZ} strokeWidth="1.6" />
+                  <text x={origin.px - 8} y={origin.py + 14} textAnchor="end" fontSize="10.5" fontFamily={CHART_FONTS.mono} fontWeight="600" fill={CHART_COLORS.mutedText}>
                     (t-6,40,-σ)
                   </text>
-                  <text x={xEnd.px} y={xEnd.py + 12} textAnchor="middle" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#9f1239">
+                  <text x={xEnd.px} y={xEnd.py + 16} textAnchor="middle" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisXLabel}>
                     +X: t+11
                   </text>
-                  <text x={yEnd.px - 4} y={yEnd.py - 5} textAnchor="end" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#065f46">
+                  <text x={yEnd.px - 6} y={yEnd.py - 8} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisYLabel}>
                     +Y: Load 100
                   </text>
-                  <text x={zEnd.px - 6} y={zEnd.py + 10} textAnchor="end" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#1e3a8a">
+                  <text x={zEnd.px - 8} y={zEnd.py + 14} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisZLabel}>
                     +Z: +σ
                   </text>
 
@@ -525,10 +538,10 @@ export default function SimulatorMultiModalCharts({
                       <polygon
                         key={p.idx}
                         points={`${p1.px},${p1.py} ${p2.px},${p2.py} ${p3.px},${p3.py} ${p4.px},${p4.py}`}
-                        fill={i > 9 ? '#818cf8' : '#3b82f6'}
+                        fill={i > 9 ? '#6366f1' : '#2563eb'}
                         fillOpacity="0.34"
-                        stroke="#4f46e5"
-                        strokeWidth="0.8"
+                        stroke="#4338ca"
+                        strokeWidth="0.9"
                       />
                     );
                   })}
@@ -536,7 +549,9 @@ export default function SimulatorMultiModalCharts({
                   <polyline
                     fill="none"
                     stroke="#1e1b4b"
-                    strokeWidth="2.4"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     points={midCurve.map((m) => `${m.px},${m.py}`).join(' ')}
                   />
                   {/* Anomaly Nodes in 3D with Offset Non-Overlapping Coordinates */}
@@ -544,27 +559,27 @@ export default function SimulatorMultiModalCharts({
                     if (!p.anomaly) return null;
                     const mx = midCurve[i].px;
                     const my = midCurve[i].py;
-                    const labelY = Math.max(16, my - 22);
+                    const labelY = Math.max(22, my - 28);
                     return (
                       <g key={`anom-${p.idx}`}>
-                        <line x1={mx} y1={my} x2={mx} y2={labelY + 4} stroke="#be123c" strokeWidth="1" strokeDasharray="2 2" />
+                        <line x1={mx} y1={my} x2={mx} y2={labelY + 5} stroke="#be123c" strokeWidth="1.2" strokeDasharray="3 2" />
                         <circle
                           cx={mx}
                           cy={my}
-                          r="4.5"
+                          r="5.5"
                           fill="#be123c"
                           stroke="#ffffff"
-                          strokeWidth="1.5"
+                          strokeWidth="1.8"
                         />
                         <text
                           x={mx}
                           y={labelY}
                           textAnchor="middle"
-                          fontSize="7.5"
-                          fontFamily="monospace"
-                          fontWeight="bold"
+                          fontSize="11"
+                          fontFamily={CHART_FONTS.mono}
+                          fontWeight="700"
                           fill="#9f1239"
-                          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3px' }}
+                          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3.5px' }}
                         >
                           ({p.tStep >= 0 ? `t+${p.tStep}` : `t${p.tStep}`}, {p.rawVal})
                         </text>
@@ -581,23 +596,23 @@ export default function SimulatorMultiModalCharts({
         <div className="rounded-2xl bg-white border border-slate-300 p-5 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-base font-bold text-slate-900">
                 4. 3D k-NN (<span className="font-mono">k=9</span>) &amp; K-Means Decision Manifold
               </h4>
-              <p className="text-[11px] font-mono text-slate-500">
+              <p className="text-xs font-mono text-slate-600">
                 Rotatable 3D Latent Cube (X, Y, Z) · Query Node q(0.1,0.2,0.1) &amp; Centroids
               </p>
             </div>
-            <span className="text-[11px] font-mono text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            <span className="text-xs font-mono text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 font-semibold">
               3D k=9 Rays
             </span>
           </div>
 
-          <svg viewBox="0 0 380 210" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
+          <svg viewBox="0 0 460 265" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
             {(() => {
-              const cx = 190;
-              const cy = 108;
-              const sc = 21;
+              const cx = 230;
+              const cy = 136;
+              const sc = 26;
               const origin = project3D(0, 0, 0, yawDeg, pitchDeg, cx, cy, sc);
               const axX = project3D(3.8, 0, 0, yawDeg, pitchDeg, cx, cy, sc);
               const axXNeg = project3D(-3.8, 0, 0, yawDeg, pitchDeg, cx, cy, sc);
@@ -621,13 +636,13 @@ export default function SimulatorMultiModalCharts({
                   <line x1={origin.px} y1={origin.py} x2={axYNeg.px} y2={axYNeg.py} stroke="#cbd5e1" strokeDasharray="3 3" />
                   <line x1={origin.px} y1={origin.py} x2={axZNeg.px} y2={axZNeg.py} stroke="#cbd5e1" strokeDasharray="3 3" />
 
-                  <line x1={origin.px} y1={origin.py} x2={axX.px} y2={axX.py} stroke="#be123c" strokeWidth="1.2" />
-                  <line x1={origin.px} y1={origin.py} x2={axY.px} y2={axY.py} stroke="#059669" strokeWidth="1.2" />
-                  <line x1={origin.px} y1={origin.py} x2={axZ.px} y2={axZ.py} stroke="#1d4ed8" strokeWidth="1.2" />
+                  <line x1={origin.px} y1={origin.py} x2={axX.px} y2={axX.py} stroke={CHART_COLORS.axisX} strokeWidth="1.5" />
+                  <line x1={origin.px} y1={origin.py} x2={axY.px} y2={axY.py} stroke={CHART_COLORS.axisY} strokeWidth="1.5" />
+                  <line x1={origin.px} y1={origin.py} x2={axZ.px} y2={axZ.py} stroke={CHART_COLORS.axisZ} strokeWidth="1.5" />
 
-                  <text x={axX.px + 4} y={axX.py + 3} fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#9f1239">+X(3.8)</text>
-                  <text x={axY.px} y={axY.py - 5} textAnchor="middle" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#065f46">+Y(3.4)</text>
-                  <text x={axZ.px - 4} y={axZ.py + 10} textAnchor="end" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#1e3a8a">+Z(3.8)</text>
+                  <text x={axX.px + 6} y={axX.py + 4} fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisXLabel}>+X(3.8)</text>
+                  <text x={axY.px} y={axY.py - 8} textAnchor="middle" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisYLabel}>+Y(3.4)</text>
+                  <text x={axZ.px - 6} y={axZ.py + 14} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisZLabel}>+Z(3.8)</text>
 
                   {/* k=9 Nearest Neighbor Rays */}
                   {k9Neighbors3D.map((n) => {
@@ -640,8 +655,8 @@ export default function SimulatorMultiModalCharts({
                         x2={np.px}
                         y2={np.py}
                         stroke="#4f46e5"
-                        strokeWidth="1.2"
-                        opacity="0.7"
+                        strokeWidth="1.5"
+                        opacity="0.72"
                       />
                     );
                   })}
@@ -652,45 +667,45 @@ export default function SimulatorMultiModalCharts({
                       key={p.id}
                       cx={p.px}
                       cy={p.py}
-                      r={Math.max(2.6, 3.9 * p.persp)}
+                      r={Math.max(3.4, 4.8 * p.persp)}
                       fill={p.color}
-                      opacity={0.85}
+                      opacity={0.88}
                     />
                   ))}
 
                   {/* Centroid Rings + Radially Pushed Non-Overlapping Labels */}
                   {centroids3D.map((c) => {
                     const cp = project3D(c.x, c.y, c.z, yawDeg, pitchDeg, cx, cy, sc);
-                    const dxOut = cp.px >= cx ? 10 : -10;
-                    const dyOut = cp.py >= cy ? 14 : -12;
+                    const dxOut = cp.px >= cx ? 12 : -12;
+                    const dyOut = cp.py >= cy ? 16 : -14;
                     return (
                       <g key={c.id}>
-                        <circle cx={cp.px} cy={cp.py} r="6.5" fill="none" stroke={c.color} strokeWidth="1.8" />
+                        <circle cx={cp.px} cy={cp.py} r="7.5" fill="none" stroke={c.color} strokeWidth="2.2" />
                         <text
                           x={cp.px + dxOut}
-                          y={Math.min(198, Math.max(14, cp.py + dyOut))}
+                          y={Math.min(248, Math.max(20, cp.py + dyOut))}
                           textAnchor={cp.px >= cx ? 'start' : 'end'}
-                          fontSize="7.4"
-                          fontFamily="monospace"
-                          fontWeight="bold"
+                          fontSize="10.5"
+                          fontFamily={CHART_FONTS.mono}
+                          fontWeight="700"
                           fill={c.color}
-                          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3px' }}
+                          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3.5px' }}
                         >
                           {c.label}
                         </text>
                       </g>
                     );
                   })}
-                  <circle cx={qProj.px} cy={qProj.py} r="5.5" fill="#1e1b4b" stroke="#ffffff" strokeWidth="1.5" />
+                  <circle cx={qProj.px} cy={qProj.py} r="6.5" fill="#1e1b4b" stroke="#ffffff" strokeWidth="1.8" />
                   <text
                     x={qProj.px}
-                    y={qProj.py - 10}
+                    y={qProj.py - 12}
                     textAnchor="middle"
-                    fontSize="8"
-                    fontFamily="monospace"
-                    fontWeight="bold"
+                    fontSize="11.5"
+                    fontFamily={CHART_FONTS.mono}
+                    fontWeight="700"
                     fill="#1e1b4b"
-                    style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3px' }}
+                    style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3.5px' }}
                   >
                     q(0.1,0.2,0.1)
                   </text>
@@ -704,23 +719,23 @@ export default function SimulatorMultiModalCharts({
         <div className="rounded-2xl bg-white border border-slate-300 p-5 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-base font-bold text-slate-900">
                 5. 3D Dense Vector Embedding Constellation
               </h4>
-              <p className="text-[11px] font-mono text-slate-500">
+              <p className="text-xs font-mono text-slate-600">
                 3D Cosine Unit Axes (±X, ±Y, ±Z) · Orthogonal FAISS L2 Projection
               </p>
             </div>
-            <span className="text-[11px] font-mono text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+            <span className="text-xs font-mono text-blue-900 bg-blue-50 px-2.5 py-1 rounded border border-blue-200 font-semibold">
               XYZ Vector Space
             </span>
           </div>
 
-          <svg viewBox="0 0 380 210" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
+          <svg viewBox="0 0 460 265" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
             {(() => {
-              const cx = 190;
-              const cy = 108;
-              const sc = 20;
+              const cx = 230;
+              const cy = 136;
+              const sc = 25;
               const orig = project3D(0, 0, 0, yawDeg, pitchDeg, cx, cy, sc);
               const xAxis = project3D(3.6, 0, 0, yawDeg, pitchDeg, cx, cy, sc);
               const yAxis = project3D(0, 3.4, 0, yawDeg, pitchDeg, cx, cy, sc);
@@ -736,21 +751,21 @@ export default function SimulatorMultiModalCharts({
               return (
                 <>
                   {/* Equator Reference Ring + Orthogonal XYZ Frame */}
-                  <ellipse cx={orig.px} cy={orig.py} rx="86" ry="28" fill="none" stroke="#cbd5e1" strokeDasharray="4 3" />
-                  <line x1={orig.px} y1={orig.py} x2={xAxis.px} y2={xAxis.py} stroke="#94a3b8" strokeDasharray="3 3" />
-                  <line x1={orig.px} y1={orig.py} x2={yAxis.px} y2={yAxis.py} stroke="#94a3b8" strokeDasharray="3 3" />
-                  <line x1={orig.px} y1={orig.py} x2={zAxis.px} y2={zAxis.py} stroke="#94a3b8" strokeDasharray="3 3" />
-                  <text x={xAxis.px + 4} y={xAxis.py + 3} fontSize="7.2" fontFamily="monospace" fill="#64748b">+X(1,0,0)</text>
-                  <text x={yAxis.px} y={yAxis.py - 5} textAnchor="middle" fontSize="7.2" fontFamily="monospace" fill="#64748b">+Y(0,1,0)</text>
-                  <text x={zAxis.px - 4} y={zAxis.py + 10} textAnchor="end" fontSize="7.2" fontFamily="monospace" fill="#64748b">+Z(0,0,1)</text>
-                  <circle cx={orig.px} cy={orig.py} r="3.5" fill="#0f172a" />
+                  <ellipse cx={orig.px} cy={orig.py} rx="108" ry="34" fill="none" stroke="#cbd5e1" strokeDasharray="4 3" />
+                  <line x1={orig.px} y1={orig.py} x2={xAxis.px} y2={xAxis.py} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth="1.2" />
+                  <line x1={orig.px} y1={orig.py} x2={yAxis.px} y2={yAxis.py} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth="1.2" />
+                  <line x1={orig.px} y1={orig.py} x2={zAxis.px} y2={zAxis.py} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth="1.2" />
+                  <text x={xAxis.px + 6} y={xAxis.py + 4} fontSize="10.5" fontFamily={CHART_FONTS.mono} fontWeight="600" fill={CHART_COLORS.mutedText}>+X(1,0,0)</text>
+                  <text x={yAxis.px} y={yAxis.py - 8} textAnchor="middle" fontSize="10.5" fontFamily={CHART_FONTS.mono} fontWeight="600" fill={CHART_COLORS.mutedText}>+Y(0,1,0)</text>
+                  <text x={zAxis.px - 6} y={zAxis.py + 14} textAnchor="end" fontSize="10.5" fontFamily={CHART_FONTS.mono} fontWeight="600" fill={CHART_COLORS.mutedText}>+Z(0,0,1)</text>
+                  <circle cx={orig.px} cy={orig.py} r="4.5" fill="#0f172a" />
 
                   {projectedRays.map((v) => {
                     const dx = v.px - orig.px;
                     const dy = v.py - orig.py;
                     const len = Math.max(1, Math.hypot(dx, dy));
-                    const lx = v.px + (dx / len) * 10;
-                    const ly = Math.min(198, Math.max(16, v.py + (dy / len) * 10));
+                    const lx = v.px + (dx / len) * 13;
+                    const ly = Math.min(248, Math.max(20, v.py + (dy / len) * 13));
                     return (
                       <g key={v.name}>
                         <line
@@ -759,18 +774,19 @@ export default function SimulatorMultiModalCharts({
                           x2={v.px}
                           y2={v.py}
                           stroke={v.color}
-                          strokeWidth="2.4"
+                          strokeWidth="2.8"
+                          strokeLinecap="round"
                         />
-                        <circle cx={v.px} cy={v.py} r="4.2" fill={v.color} stroke="#ffffff" strokeWidth="1" />
+                        <circle cx={v.px} cy={v.py} r="5.2" fill={v.color} stroke="#ffffff" strokeWidth="1.4" />
                         <text
                           x={lx}
                           y={ly}
                           textAnchor={dx >= 0 ? 'start' : 'end'}
-                          fontSize="7.8"
-                          fontFamily="monospace"
-                          fontWeight="bold"
+                          fontSize="11.5"
+                          fontFamily={CHART_FONTS.mono}
+                          fontWeight="700"
                           fill={v.color}
-                          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3px' }}
+                          style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3.5px' }}
                         >
                           {v.name} ({v.sim})
                         </text>
@@ -787,23 +803,23 @@ export default function SimulatorMultiModalCharts({
         <div className="rounded-2xl bg-white border border-slate-300 p-5 shadow-xs space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-base font-bold text-slate-900">
                 6. 3D Tensor Activation Voxel Cube
               </h4>
-              <p className="text-[11px] font-mono text-slate-500">
+              <p className="text-xs font-mono text-slate-600">
                 3D [4×4×3] Coordinate Frame · Shape: <span className="text-indigo-800 font-semibold">{tensorShape}</span>
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+            <span className="text-xs font-mono text-slate-800 bg-slate-100 px-2.5 py-1 rounded border border-slate-300 font-semibold">
               FP16 XYZ Voxels
             </span>
           </div>
 
-          <svg viewBox="0 0 380 210" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
+          <svg viewBox="0 0 460 265" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
             {(() => {
-              const cx = 185;
-              const cy = 102;
-              const sc = 20;
+              const cx = 232;
+              const cy = 132;
+              const sc = 26;
               const p000 = project3D(-2.3, -2.1, -1.7, yawDeg, pitchDeg, cx, cy, sc);
               const pX = project3D(2.6, -2.1, -1.7, yawDeg, pitchDeg, cx, cy, sc);
               const pY = project3D(-2.3, 2.3, -1.7, yawDeg, pitchDeg, cx, cy, sc);
@@ -812,27 +828,27 @@ export default function SimulatorMultiModalCharts({
 
               return (
                 <>
-                  <line x1={p000.px} y1={p000.py} x2={pX.px} y2={pX.py} stroke="#be123c" strokeWidth="1.2" />
-                  <line x1={p000.px} y1={p000.py} x2={pY.px} y2={pY.py} stroke="#059669" strokeWidth="1.2" />
-                  <line x1={p000.px} y1={p000.py} x2={pZ.px} y2={pZ.py} stroke="#1d4ed8" strokeWidth="1.2" />
-                  <text x={p000.px - 6} y={p000.py + 10} textAnchor="end" fontSize="7.4" fontFamily="monospace" fill="#475569">
+                  <line x1={p000.px} y1={p000.py} x2={pX.px} y2={pX.py} stroke={CHART_COLORS.axisX} strokeWidth="1.5" />
+                  <line x1={p000.px} y1={p000.py} x2={pY.px} y2={pY.py} stroke={CHART_COLORS.axisY} strokeWidth="1.5" />
+                  <line x1={p000.px} y1={p000.py} x2={pZ.px} y2={pZ.py} stroke={CHART_COLORS.axisZ} strokeWidth="1.5" />
+                  <text x={p000.px - 8} y={p000.py + 14} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="600" fill={CHART_COLORS.mutedText}>
                     (0,0,0)
                   </text>
-                  <text x={pX.px + 6} y={pX.py + 8} fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#9f1239">
+                  <text x={pX.px + 8} y={pX.py + 10} fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisXLabel}>
                     +X: Batch[0..3]
                   </text>
-                  <text x={pY.px - 4} y={pY.py - 5} textAnchor="end" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#065f46">
+                  <text x={pY.px - 6} y={pY.py - 8} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisYLabel}>
                     +Y: Layer[0..3]
                   </text>
-                  <text x={pZ.px - 6} y={pZ.py + 10} textAnchor="end" fontSize="7.5" fontFamily="monospace" fontWeight="bold" fill="#1e3a8a">
+                  <text x={pZ.px - 8} y={pZ.py + 14} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisZLabel}>
                     +Z: Head[0..2]
                   </text>
 
                   {voxels3D.map((v, i) => {
                     const s = v.size;
-                    const frontC = v.act > 0.72 ? '#4338ca' : v.act > 0.45 ? '#3b82f6' : '#93c5fd';
+                    const frontC = v.act > 0.72 ? '#4338ca' : v.act > 0.45 ? '#2563eb' : '#93c5fd';
                     const topC = v.act > 0.72 ? '#818cf8' : v.act > 0.45 ? '#60a5fa' : '#bfdbfe';
-                    const sideC = v.act > 0.72 ? '#1e1b4b' : v.act > 0.45 ? '#1d4ed8' : '#60a5fa';
+                    const sideC = v.act > 0.72 ? '#1e1b4b' : v.act > 0.45 ? '#1e3a8a' : '#3b82f6';
                     return (
                       <Bar3D
                         key={i}
@@ -840,8 +856,8 @@ export default function SimulatorMultiModalCharts({
                         y={v.py - s / 2}
                         w={s}
                         h={s}
-                        dx={4}
-                        dy={-3}
+                        dx={5}
+                        dy={-4}
                         frontColor={frontC}
                         topColor={topC}
                         sideColor={sideC}
@@ -849,13 +865,13 @@ export default function SimulatorMultiModalCharts({
                     );
                   })}
                   <text
-                    x={pMax.px + 12}
-                    y={Math.max(18, pMax.py - 8)}
-                    fontSize="7.5"
-                    fontFamily="monospace"
-                    fontWeight="bold"
+                    x={pMax.px + 14}
+                    y={Math.max(22, pMax.py - 10)}
+                    fontSize="11.5"
+                    fontFamily={CHART_FONTS.mono}
+                    fontWeight="700"
                     fill="#312e81"
-                    style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3px' }}
+                    style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3.5px' }}
                   >
                     (3,3,2)
                   </text>

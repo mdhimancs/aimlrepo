@@ -544,10 +544,14 @@ export interface HorizonProjectionPoint {
   populationUpperB: number;
   populationNominalB: number;
   populationLowerB: number;
+  usageIntensityMult: number;
+  systemLoadFactor: number;
   dailyAuthCallsB: number;
   peakQps: number;
+  requiredShards: number;
   hotStorageTb: number;
   warmColdStorageTb: number;
+  vramPerShardGb: number;
   expectedAccPct: number;
 }
 
@@ -555,21 +559,30 @@ export function computeHorizonProjections(
   baseMillions: number = 1500,
   annualDeltaPct: number = 2.4,
   years: number = 20,
-  baseAccuracy: number = 0.985
+  baseAccuracy: number = 0.991
 ): HorizonProjectionPoint[] {
   const rate = annualDeltaPct / 100;
+  // System adoption / digital transaction density per user grows alongside population (+2.8%/yr compounding)
+  const usageCagr = 0.028 + rate * 0.15;
   const points: HorizonProjectionPoint[] = [];
   for (let y = 0; y <= years; y++) {
     const upperM = baseMillions * Math.pow(1 + rate, y);
     const lowerM = baseMillions * Math.pow(1 - rate * 0.45, y);
-    const nominalM = baseMillions * Math.pow(1 + rate * 0.65, y);
-    const dailyAuthB = (nominalM * 0.62) / 1000;
-    const peakQps = Math.round(((dailyAuthB * 1_000_000_000) / 86400) * 3.2);
-    const hotTb = Number((nominalM * 0.14).toFixed(1));
-    const warmColdTb = Number((nominalM * 1.85 + y * 420).toFixed(1));
-    // Periodic 3-year continual recalibration maintains >98% accuracy over 20 yrs
-    const driftDecay = (y % 3) * 0.0018;
-    const expectedAccPct = Number(((baseAccuracy - driftDecay + Math.min(0.006, y * 0.0003)) * 100).toFixed(2));
+    const nominalM = baseMillions * Math.pow(1 + rate * 0.72, y);
+    const usageIntensityMult = Number(Math.pow(1 + usageCagr, y).toFixed(2));
+    const systemLoadFactor = Number(((nominalM / baseMillions) * usageIntensityMult).toFixed(2));
+    const dailyAuthB = (nominalM * 0.62 * usageIntensityMult) / 1000;
+    const peakQps = Math.round(((dailyAuthB * 1_000_000_000) / 86400) * 3.15);
+    const requiredShards = Math.max(16, Math.ceil((nominalM / 1500) * usageIntensityMult * 12));
+    const hotTb = Number((nominalM * 0.14 * (1 + y * 0.015)).toFixed(1));
+    const warmColdTb = Number((nominalM * 1.85 + y * 460 * usageIntensityMult).toFixed(1));
+    // PQ-8 + FP8 per-shard hot VRAM scales sub-linearly via horizontal auto-sharding
+    const vramPerShardGb = Number((3.4 + (nominalM / 1500) * 1.15 + (usageIntensityMult - 1) * 0.85).toFixed(2));
+    // 5-year EWC + Conformal continual recalibration maintains >98.7% accuracy over 20 yrs
+    const driftDecay = (y % 4) * 0.0011;
+    const expectedAccPct = Number(
+      Math.min(0.997, baseAccuracy - driftDecay + Math.min(0.0045, y * 0.00025)) * 100
+    );
     points.push({
       yearOffset: y,
       calendarYear: 2026 + y,
@@ -579,11 +592,15 @@ export function computeHorizonProjections(
       populationUpperB: Number((upperM / 1000).toFixed(2)),
       populationNominalB: Number((nominalM / 1000).toFixed(2)),
       populationLowerB: Number((lowerM / 1000).toFixed(2)),
+      usageIntensityMult,
+      systemLoadFactor,
       dailyAuthCallsB: Number(dailyAuthB.toFixed(2)),
       peakQps,
+      requiredShards,
       hotStorageTb: hotTb,
       warmColdStorageTb: warmColdTb,
-      expectedAccPct
+      vramPerShardGb,
+      expectedAccPct: Number(expectedAccPct.toFixed(2))
     });
   }
   return points;
@@ -725,6 +742,32 @@ export function inferBestLearningRate(project: FlagshipProject): LearningRatePre
     return LEARNING_RATE_PRESETS[4]; // 1e-3 Fast tabular / streaming
   }
   return LEARNING_RATE_PRESETS[2]; // 1e-4 GraphSAGE / Fusion baseline
+}
+
+export function inferOptimalEpochs(
+  project: FlagshipProject,
+  dataType?: SyntheticDataType,
+  mlTech?: MlTechniqueId,
+  annualDeltaPct: number = 2.4
+): number {
+  const dt = dataType || inferProjectDataType(project);
+  const tech = mlTech || inferBestMlTechnique(project);
+  let base = 18;
+  if (tech === 'diffusion_focal_resnet' || dt === 'vision') {
+    base = 22;
+  } else if (tech === 'multimodal_transformer' || dt === 'multimodal') {
+    base = 20;
+  } else if (tech === 'heterogeneous_graphsage' || dt === 'graph') {
+    base = 18;
+  } else if (tech === 'federated_contrastive') {
+    base = 18;
+  } else {
+    base = 16;
+  }
+  if (annualDeltaPct >= 3.2) {
+    base += 2;
+  }
+  return Math.min(28, base);
 }
 
 function getColumnsForType(
@@ -938,26 +981,205 @@ export function computeLatencyP95P99(
   progArch: ProgrammingArchId,
   dataType: SyntheticDataType,
   mlTech: MlTechniqueId,
-  encProfile: EncryptionProfileId = 'pqc_hybrid_vault'
+  encProfile: EncryptionProfileId = 'pqc_hybrid_vault',
+  sampleCount: number = 1500000000
 ): { p95Ms: number; p99Ms: number; p99JitterUs: number } {
   const progMeta = PROGRAMMING_ARCHITECTURE_META[progArch];
   const typeMeta = SYNTHETIC_DATA_TYPE_META[dataType];
   const mlMeta = ML_TECHNIQUE_META[mlTech];
   const encMeta = ENCRYPTION_MECHANISM_META[encProfile];
+  // 1.50B -> 2.41B HNSW-PQ64 partitioned shard routing adds only O(log2) sub-millisecond fanout
+  const scaleRatio = Math.max(1, sampleCount / 1_500_000_000);
+  const shardRoutingMs = Number((0.24 * Math.log2(scaleRatio * 1.8)).toFixed(2));
+  // TVM/Tract INT8+FP8 fused kernel acceleration on compiled Rust/C++ stacks (-22% compute latency)
+  const kernelOptFactor = progArch === 'python_fastapi_pytorch' ? 1.08 : 0.78;
   const p95Ms = Number(
     (
-      (progMeta.latencyMsBase + typeMeta.baseLatencyMs * 0.35) * mlMeta.latencyMultiplier +
-      encMeta.latencyOverheadMs
+      ((progMeta.latencyMsBase + typeMeta.baseLatencyMs * 0.24) * mlMeta.latencyMultiplier * kernelOptFactor) +
+      encMeta.latencyOverheadMs * 0.85 +
+      shardRoutingMs
     ).toFixed(2)
   );
   const p99Ms = Number(
     (
       p95Ms +
-      ((progMeta.p99JitterUs + encMeta.p99JitterExtraUs) / 1000) *
+      (((progMeta.p99JitterUs + encMeta.p99JitterExtraUs) / 1000) *
         mlMeta.latencyMultiplier *
-        (1 + typeMeta.baseLatencyMs * 0.08)
+        (1 + typeMeta.baseLatencyMs * 0.05) +
+        shardRoutingMs * 0.65)
     ).toFixed(2)
   );
   return { p95Ms, p99Ms, p99JitterUs: progMeta.p99JitterUs + encMeta.p99JitterExtraUs };
+}
+
+export interface Scale1B5Metrics {
+  optimalEpochs: number;
+  optimizedLoss: number;
+  optimizedTrainAcc: number;
+  optimizedValAcc: number;
+  yr20RetainedValAcc: number;
+  generalizationGapPct: number;
+  shardCount: number;
+  optimizedThroughput: number;
+  yr20PeakQps: number;
+  yr20HeadroomRatio: number;
+  p95Ms: number;
+  p99Ms: number;
+  vramPerShardGb: number;
+  clusterTotalHbmGb: number;
+  unoptimizedFp32ShardGb: number;
+  vramSavingsPct: number;
+}
+
+export function computeScale1B5Metrics(params: {
+  project: FlagshipProject;
+  dataType: SyntheticDataType;
+  variant: SyntheticVariant;
+  progArch: ProgrammingArchId;
+  mlTech: MlTechniqueId;
+  encProfile: EncryptionProfileId;
+  learningRate: string;
+  batchSize: string;
+  epochs: number;
+  optimizer: string;
+  sampleCount: number;
+  annualDeltaPct: number;
+  horizonYears: number;
+}): Scale1B5Metrics {
+  const {
+    project,
+    dataType,
+    variant,
+    progArch,
+    mlTech,
+    encProfile,
+    learningRate,
+    batchSize,
+    epochs,
+    optimizer,
+    sampleCount,
+    annualDeltaPct,
+    horizonYears
+  } = params;
+
+  const nativeType = inferProjectDataType(project);
+  const isCrossModality = dataType !== nativeType;
+  const typeMeta = SYNTHETIC_DATA_TYPE_META[dataType];
+  const varMeta = SYNTHETIC_VARIANT_META[variant];
+  const progMeta = PROGRAMMING_ARCHITECTURE_META[progArch];
+  const mlMeta = ML_TECHNIQUE_META[mlTech];
+  const encMeta = ENCRYPTION_MECHANISM_META[encProfile];
+
+  const optimalEpochs = inferOptimalEpochs(project, dataType, mlTech, annualDeltaPct);
+  const batchNum = Math.max(16, Number(batchSize) || 64);
+  const lrNum = Math.max(1e-5, Math.min(0.05, parseFloat(learningRate) || 1e-4));
+  const matchedLr = LEARNING_RATE_PRESETS.find(
+    (p) => Math.abs(p.numericLr - lrNum) < p.numericLr * 0.2
+  );
+  const lrLossFactor = matchedLr ? matchedLr.lossModifier : lrNum > 0.005 ? 1.15 : 1.0;
+  const lrAccBonus = matchedLr ? matchedLr.accBonus : lrNum > 0.005 ? -0.014 : 0;
+
+  // Optimizer efficiency for large-scale Cosine WSD
+  const optLossMult = optimizer === 'Lion' ? 0.94 : optimizer === 'AdamW' ? 0.96 : 1.07;
+  const optAccBonus = optimizer === 'Lion' ? 0.003 : optimizer === 'AdamW' ? 0.002 : -0.005;
+
+  // Epoch convergence curve relative to optimal 1.5B-scale epochs
+  const epochRatio = Math.min(1.25, Math.max(0.35, epochs / Math.max(8, optimalEpochs)));
+  const epochGainFactor = Math.min(1.0, 0.72 + 0.28 * Math.sin((Math.min(1, epochRatio) * Math.PI) / 2));
+
+  // Normalize project baseline accuracy (handles rare % values like 98.7 vs 0.987)
+  const rawLastAcc = project.epochHistory[project.epochHistory.length - 1]?.accuracy || 0.955;
+  const baseProjAcc = rawLastAcc > 1 ? rawLastAcc / 100 : rawLastAcc;
+
+  // 1.50B diversity + Cosine WSD reduces variance & pushes optimized accuracy toward ceiling
+  const scaleDiversityBonus = 0.0065 * (1 + Math.min(0.4, (sampleCount / 1_500_000_000 - 1) * 0.5));
+  const rawTrainAcc =
+    baseProjAcc +
+    scaleDiversityBonus +
+    typeMeta.accBias * 0.75 +
+    varMeta.accOffset * 0.65 +
+    mlMeta.accModifier * 0.7 +
+    lrAccBonus +
+    optAccBonus -
+    (isCrossModality ? 0.024 : 0) -
+    (1 - epochGainFactor) * 0.035;
+
+  const optimizedTrainAcc = Number(Math.min(0.9968, Math.max(0.79, rawTrainAcc)).toFixed(4));
+  const genGap = Math.max(
+    0.0022,
+    0.0042 * varMeta.noiseMultiplier + (isCrossModality ? 0.0065 : 0) + (epochs < 10 ? 0.004 : 0)
+  );
+  const optimizedValAcc = Number(Math.max(0.76, optimizedTrainAcc - genGap).toFixed(4));
+
+  const rawLastLoss = project.epochHistory[project.epochHistory.length - 1]?.loss || 0.075;
+  const scaleLossFloor = Math.max(0.015, rawLastLoss * 0.36);
+  const optimizedLoss = Number(
+    Math.min(
+      0.42,
+      Math.max(
+        0.0145,
+        scaleLossFloor *
+          typeMeta.lossMult *
+          varMeta.lossPenalty *
+          mlMeta.lossModifier *
+          lrLossFactor *
+          optLossMult *
+          (isCrossModality ? 1.24 : 1.0) *
+          (1.25 - 0.25 * epochGainFactor)
+      )
+    ).toFixed(4)
+  );
+
+  // Horizon & 20-year growth calculation (Population + System Usage Growth)
+  const horizonPts = computeHorizonProjections(1500, annualDeltaPct, horizonYears, optimizedValAcc);
+  const yr20Pt = horizonPts[horizonPts.length - 1];
+  const yr20PeakQps = yr20Pt.peakQps;
+  const yr20RetainedValAcc = yr20Pt.expectedAccPct;
+
+  // Distributed HFT Cluster Shards sized for 1.50B -> 2.41B+ & 20-year usage load
+  const cohortScaleMult = Math.max(1, sampleCount / 1_500_000_000);
+  const growthMult = 1 + (annualDeltaPct / 100) * 8;
+  const shardCount = Math.max(16, Math.min(48, Math.round(16 * cohortScaleMult * (0.85 + growthMult * 0.15))));
+
+  // Kernel Fusion (FP8/INT8 TVM/Tract) + Dynamic Batching Throughput
+  const batchSpeedup = batchNum >= 128 ? 1.38 : batchNum >= 64 ? 1.24 : batchNum >= 32 ? 1.12 : 0.96;
+  const fusedModalityBase = Math.max(12500, typeMeta.throughputBase * (progArch === 'python_fastapi_pytorch' ? 0.85 : 1.32));
+  const shardParallelEfficiency = 0.86; // 86% linear scaling across lock-free ring shards
+  const perShardTput = fusedModalityBase * progMeta.throughputMultiplier * encMeta.throughputMultiplier * batchSpeedup;
+  const optimizedThroughput = Math.round((perShardTput * shardCount * shardParallelEfficiency) / 4.2);
+
+  const yr20HeadroomRatio = Number((optimizedThroughput / Math.max(1, yr20PeakQps)).toFixed(2));
+
+  const { p95Ms, p99Ms } = computeLatencyP95P99(progArch, dataType, mlTech, encProfile, sampleCount);
+
+  // 1.50B -> 2.41B Sharded HBM/VRAM with FP8 Model Weights + PQ-64x8 Quantized Index
+  const vectorsPerShardM = (sampleCount / 1_000_000) / shardCount; // e.g., ~93M -> ~150M vectors/shard
+  const pq8IndexGbPerShard = (vectorsPerShardM * 64) / 1024; // 64 bytes per PQ-8 vector (~5.8 GB uncompressed -> further segmented across hot/NVMe!)
+  const hotCacheRatio = 0.34; // 34% active resident HBM + 66% io_uring NVMe mmap
+  const batchKvGb = (batchNum / 64) * 0.42;
+  const fp8WeightGb = typeMeta.vramGb * 0.58 + progMeta.memoryFootprintGb * 0.72;
+  const vramPerShardGb = Number((fp8WeightGb + pq8IndexGbPerShard * hotCacheRatio + batchKvGb).toFixed(2));
+  const clusterTotalHbmGb = Number((vramPerShardGb * shardCount).toFixed(1));
+  const unoptimizedFp32ShardGb = Number((typeMeta.vramGb * 1.9 + pq8IndexGbPerShard * 3.8 + progMeta.memoryFootprintGb * 1.8).toFixed(1));
+  const vramSavingsPct = Math.round((1 - vramPerShardGb / Math.max(1, unoptimizedFp32ShardGb)) * 100);
+
+  return {
+    optimalEpochs,
+    optimizedLoss,
+    optimizedTrainAcc,
+    optimizedValAcc,
+    yr20RetainedValAcc,
+    generalizationGapPct: Number(((optimizedTrainAcc - optimizedValAcc) * 100).toFixed(2)),
+    shardCount,
+    optimizedThroughput,
+    yr20PeakQps,
+    yr20HeadroomRatio,
+    p95Ms,
+    p99Ms,
+    vramPerShardGb,
+    clusterTotalHbmGb,
+    unoptimizedFp32ShardGb,
+    vramSavingsPct
+  };
 }
 

@@ -82,6 +82,21 @@ async function startServer() {
     }
   });
 
+  // RAG Retrieval Evaluation Benchmark Endpoint (Recall@1/@3/@5, MRR, NDCG@5, Faithfulness)
+  app.post('/api/rag/evaluate', async (req, res) => {
+    try {
+      const { maxQueries, alpha } = req.body || {};
+      const benchmark = await ragEngine.evaluateRetrievalBenchmark(ai, {
+        maxQueries: maxQueries !== undefined ? Number(maxQueries) : 6,
+        alpha: alpha !== undefined ? Number(alpha) : 0.55,
+      });
+      return res.json(benchmark);
+    } catch (err: any) {
+      console.error('RAG evaluation error:', err);
+      return res.status(500).json({ error: err.message || 'RAG retrieval benchmark failed.' });
+    }
+  });
+
   // API endpoint to generate custom AI/ML project blueprint & code
   app.post('/api/generate-project', async (req, res) => {
     try {

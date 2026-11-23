@@ -68,7 +68,7 @@ export default function RepoRagIngestionPanel({
   onRefreshStatus,
   onOpenCopilot
 }: RepoRagIngestionPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<PanelSubTab>('ingest');
   const [mode, setMode] = useState<'pdf_url' | 'raw_text'>('pdf_url');
   const [title, setTitle] = useState('');

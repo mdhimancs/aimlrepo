@@ -14,6 +14,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import SimulatorMultiModalCharts from './SimulatorMultiModalCharts';
+import RealDataInferencePanel from './RealDataInferencePanel';
 import { FlagshipProject, SyntheticDataType, SyntheticVariant } from '../types';
 import {
   ENCRYPTION_MECHANISM_META,
@@ -27,14 +28,17 @@ import {
   SYNTHETIC_VARIANT_META,
   computeHorizonProjections,
   computeLatencyP95P99,
+  computeScale1B5Metrics,
   generateSyntheticSamples,
   getSyntheticDatasetProfile,
   inferBestLearningRate,
   inferBestMlTechnique,
   inferBestProgrammingArch,
+  inferOptimalEpochs,
   inferProjectDataType
 } from '../utils/syntheticDataset';
-import { computeProjectEconomics, formatInrCompact } from '../utils/projectEconomics';
+import { computeProjectEconomics, formatInrCompact, formatRsOnly, formatUsdOnly } from '../utils/projectEconomics';
+import { CHART_COLORS, CHART_FONTS } from '../utils/chartTheme';
 
 export interface SimConfigState {
   projectId: string;
@@ -134,49 +138,33 @@ export default function MLTrainingSimulatorTab({
     LEARNING_RATE_PRESETS.find((p) => Number(simConfig.learningRate) === p.numericLr) ||
     bestLrPreset;
 
-  const baseProjAcc =
-    activeSimProject.epochHistory[activeSimProject.epochHistory.length - 1]?.accuracy || 0.945;
+  const scaleMetrics = computeScale1B5Metrics({
+    project: activeSimProject,
+    dataType: simConfig.dataType,
+    variant: simConfig.syntheticVariant,
+    progArch: simConfig.programmingArch,
+    mlTech: simConfig.mlTechnique,
+    encProfile: simConfig.encryptionProfile,
+    learningRate: simConfig.learningRate,
+    batchSize: simConfig.batchSize,
+    epochs: simConfig.epochs,
+    optimizer: simConfig.optimizer,
+    sampleCount: simConfig.sampleCount,
+    annualDeltaPct: simConfig.annualDeltaPct,
+    horizonYears: simConfig.horizonYears
+  });
 
   const latestLog = trainingLogs.length > 0 ? trainingLogs[trainingLogs.length - 1] : null;
   const progressPct = Math.min(100, Math.round((trainingEpoch / Math.max(1, simConfig.epochs)) * 100));
 
-  const projectedAcc = Math.min(
-    0.996,
-    Math.max(
-      0.76,
-      baseProjAcc +
-        activeTypeMeta.accBias +
-        activeVarMeta.accOffset +
-        activeMlMeta.accModifier -
-        (isCrossModality ? 0.028 : 0)
-    )
-  );
-  const activeLatMetrics = computeLatencyP95P99(
-    simConfig.programmingArch,
-    simConfig.dataType,
-    simConfig.mlTechnique,
-    simConfig.encryptionProfile
-  );
-  const projectedLatencyMs = activeLatMetrics.p95Ms;
-  const projectedP99LatencyMs = activeLatMetrics.p99Ms;
-  const projectedThroughput = Math.round(
-    activeTypeMeta.throughputBase * activeProgMeta.throughputMultiplier * activeEncMeta.throughputMultiplier
-  );
+  const projectedAcc = scaleMetrics.optimizedTrainAcc;
+  const projectedLatencyMs = scaleMetrics.p95Ms;
+  const projectedP99LatencyMs = scaleMetrics.p99Ms;
+  const projectedThroughput = scaleMetrics.optimizedThroughput;
 
   const displayAcc = latestLog ? latestLog.accuracy : projectedAcc;
-  const displayValAcc = latestLog
-    ? latestLog.valAcc
-    : Math.max(0.72, projectedAcc - 0.011 * activeVarMeta.noiseMultiplier);
-  const displayLoss = latestLog
-    ? latestLog.loss
-    : Number(
-        (
-          (activeSimProject.epochHistory[activeSimProject.epochHistory.length - 1]?.loss || 0.14) *
-          activeTypeMeta.lossMult *
-          activeVarMeta.lossPenalty *
-          activeMlMeta.lossModifier
-        ).toFixed(4)
-      );
+  const displayValAcc = latestLog ? latestLog.valAcc : scaleMetrics.optimizedValAcc;
+  const displayLoss = latestLog ? latestLog.loss : scaleMetrics.optimizedLoss;
   const displayThroughput = latestLog ? latestLog.throughput : projectedThroughput;
   const displayLatency = latestLog ? latestLog.latencyMs : projectedLatencyMs;
   const displayP99Latency = latestLog ? latestLog.p99LatencyMs : projectedP99LatencyMs;
@@ -189,6 +177,7 @@ export default function MLTrainingSimulatorTab({
     displayValAcc
   );
   const year20Point = horizonPoints[horizonPoints.length - 1];
+  const activeYr20Headroom = Number((displayThroughput / Math.max(1, year20Point.peakQps)).toFixed(2));
 
   const handleSelectTargetProject = (projectId: string) => {
     const nextProj = allProjects.find((p) => p.id === projectId) || allProjects[0];
@@ -196,6 +185,7 @@ export default function MLTrainingSimulatorTab({
     const autoProgArch = inferBestProgrammingArch(nextProj);
     const autoMlTech = inferBestMlTechnique(nextProj);
     const autoLr = inferBestLearningRate(nextProj);
+    const autoEpochs = inferOptimalEpochs(nextProj, autoDataType, autoMlTech, simConfig.annualDeltaPct);
     const nextConfig: SimConfigState = {
       ...simConfig,
       projectId: nextProj.id,
@@ -203,7 +193,30 @@ export default function MLTrainingSimulatorTab({
       dataType: autoDataType,
       programmingArch: autoProgArch,
       mlTechnique: autoMlTech,
-      learningRate: autoLr.lrValue
+      learningRate: autoLr.lrValue,
+      batchSize: '64',
+      epochs: autoEpochs
+    };
+    setSimConfig(nextConfig);
+    onStartTraining(nextConfig);
+  };
+
+  const handleOptimizeAllFor1B5 = () => {
+    const autoDataType = inferProjectDataType(activeSimProject);
+    const autoProgArch = inferBestProgrammingArch(activeSimProject);
+    const autoMlTech = inferBestMlTechnique(activeSimProject);
+    const autoLr = inferBestLearningRate(activeSimProject);
+    const autoEpochs = inferOptimalEpochs(activeSimProject, autoDataType, autoMlTech, simConfig.annualDeltaPct);
+    const nextConfig: SimConfigState = {
+      ...simConfig,
+      dataType: autoDataType,
+      programmingArch: autoProgArch,
+      mlTechnique: autoMlTech,
+      learningRate: autoLr.lrValue,
+      optimizer: 'AdamW',
+      batchSize: '64',
+      epochs: autoEpochs,
+      encryptionProfile: 'pqc_hybrid_vault'
     };
     setSimConfig(nextConfig);
     onStartTraining(nextConfig);
@@ -230,8 +243,8 @@ export default function MLTrainingSimulatorTab({
     '05. SLA & Crypto Audit'
   ];
 
-  const slaPass = displayLatency <= 45;
-  const generalizationGapPct = Number(((displayAcc - displayValAcc) * 100).toFixed(2));
+  const slaPass = displayP99Latency <= 15 && activeYr20Headroom >= 1.1;
+  const generalizationGapPct = Number(Math.max(0.18, (displayAcc - displayValAcc) * 100).toFixed(2));
 
   return (
     <div className="space-y-8">
@@ -267,14 +280,19 @@ export default function MLTrainingSimulatorTab({
       {/* Main Split: Left Configuration Controls + Right Live Simulation & Outcomes */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Simulator Controls Panel */}
-        <div className="lg:col-span-4 bg-slate-100 border border-slate-300 rounded-2xl p-5 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-300">
+        <div className="lg:col-span-4 w-[443.328px] bg-slate-100 border border-slate-300 rounded-2xl py-5 pr-5 pl-[12px] -ml-[5px] space-y-4 shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-300 gap-2">
             <h3 className="text-sm font-bold text-slate-900">
               Experiment Configuration
             </h3>
-            <span className="text-[11px] font-mono text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded font-semibold">
-              Auto-Select Active
-            </span>
+            <button
+              type="button"
+              onClick={handleOptimizeAllFor1B5}
+              title="Lock optimal Epochs, Batch Size, LR, Stack, and PQ-8 Sharding for 1.50B 20-Yr Horizon"
+              className="text-[11px] font-mono text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer"
+            >
+              ★ Optimize 1.5B · 20-Yr
+            </button>
           </div>
 
           <div>
@@ -286,7 +304,7 @@ export default function MLTrainingSimulatorTab({
               onChange={(e) => handleSelectTargetProject(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-900 shadow-xs"
             >
-              <optgroup label="Research Projects (Flagship + Starred)">
+              <optgroup label="Storyboard (Starred Projects)">
                 {researchProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {starredRepoIds.includes(p.id) ? '★ ' : ''}
@@ -528,12 +546,12 @@ export default function MLTrainingSimulatorTab({
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Epochs ({simConfig.epochs})
+                  Epochs ({simConfig.epochs} · Opt: {scaleMetrics.optimalEpochs})
                 </label>
                 <input
                   type="range"
                   min={6}
-                  max={20}
+                  max={28}
                   step={2}
                   value={simConfig.epochs}
                   onChange={(e) => setSimConfig({ ...simConfig, epochs: Number(e.target.value) })}
@@ -636,40 +654,58 @@ export default function MLTrainingSimulatorTab({
               </div>
             </div>
 
-            {/* 6 KPI Cards */}
+            {/* 6 Optimized 1.50B + 20-Year Scale KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-mono">Epoch</span>
-                <span className="text-lg font-bold font-mono text-slate-900">
+                <span className="text-[11px] text-slate-600 block font-mono font-semibold">Epochs (WSD)</span>
+                <span className="text-lg font-bold font-mono tabular-nums text-slate-900">
                   {trainingEpoch} / {simConfig.epochs}
                 </span>
+                <span className="text-[10.5px] font-mono text-indigo-800 block mt-0.5">
+                  Opt {scaleMetrics.optimalEpochs} ep · 5-Yr Replay
+                </span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-mono">Final / Live Loss</span>
-                <span className="text-lg font-bold font-mono text-blue-900">{displayLoss}</span>
+                <span className="text-[11px] text-slate-600 block font-mono font-semibold">Final / Live Loss</span>
+                <span className="text-lg font-bold font-mono tabular-nums text-blue-900">{displayLoss}</span>
+                <span className="text-[10.5px] font-mono text-slate-600 block mt-0.5">
+                  Cosine WSD Opt (1.5B)
+                </span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-mono">Val Accuracy</span>
-                <span className="text-lg font-bold font-mono text-emerald-800">
+                <span className="text-[11px] text-slate-600 block font-mono font-semibold">Val Accuracy</span>
+                <span className="text-lg font-bold font-mono tabular-nums text-emerald-800">
                   {(displayValAcc * 100).toFixed(2)}%
                 </span>
+                <span className="text-[10.5px] font-mono text-emerald-700 block mt-0.5">
+                  Yr+20 Ret: {year20Point.expectedAccPct}%
+                </span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-mono">1.50B Throughput</span>
-                <span className="text-lg font-bold font-mono text-indigo-900">
+                <span className="text-[11px] text-slate-600 block font-mono font-semibold">1.50B Throughput</span>
+                <span className="text-lg font-bold font-mono tabular-nums text-indigo-900">
                   {displayThroughput.toLocaleString()}/s
                 </span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-mono">P95 / P99 Latency</span>
-                <span className="text-base font-bold font-mono text-slate-900">
-                  {displayLatency} / {displayP99Latency} ms
+                <span className="text-[10.5px] font-mono text-indigo-700 block mt-0.5">
+                  {scaleMetrics.shardCount} shards · {activeYr20Headroom}x Yr-20
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-mono">VRAM / RAM</span>
-                <span className="text-lg font-bold font-mono text-slate-800">
-                  {(activeTypeMeta.vramGb + activeProgMeta.memoryFootprintGb).toFixed(2)} GB
+                <span className="text-[11px] text-slate-600 block font-mono font-semibold">P95 / P99 Latency</span>
+                <span className="text-base font-bold font-mono tabular-nums text-slate-900">
+                  {displayLatency} / {displayP99Latency} ms
+                </span>
+                <span className="text-[10.5px] font-mono text-emerald-800 block mt-0.5">
+                  HNSW-PQ64 · &lt;15ms SLA
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-[11px] text-slate-600 block font-mono font-semibold">VRAM / Shard</span>
+                <span className="text-lg font-bold font-mono tabular-nums text-slate-900">
+                  {scaleMetrics.vramPerShardGb} GB
+                </span>
+                <span className="text-[10.5px] font-mono text-emerald-800 block mt-0.5">
+                  FP8+PQ8 (-{scaleMetrics.vramSavingsPct}% FP32)
                 </span>
               </div>
             </div>
@@ -700,11 +736,14 @@ export default function MLTrainingSimulatorTab({
                 {activeProjectEconomics.opExCategories.map((cat) => (
                   <div key={cat.key} className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
                     <span className="text-slate-500 block text-[10px] truncate">{cat.shortLabel}</span>
-                    <span className="font-bold text-slate-900">
-                      {formatInrCompact(cat.total20YrUsd)}
+                    <span className="font-bold text-slate-900 block">
+                      {formatUsdOnly(cat.total20YrUsd)}
+                    </span>
+                    <span className="text-slate-600 text-[9.5px] block">
+                      {formatRsOnly(cat.total20YrUsd)}
                     </span>
                     <span className="text-slate-500 text-[9.5px] block">
-                      Y1: {formatInrCompact(cat.year1Usd)} ({cat.sharePct}%)
+                      Y1: {formatUsdOnly(cat.year1Usd)} ({cat.sharePct}%)
                     </span>
                   </div>
                 ))}
@@ -731,42 +770,55 @@ export default function MLTrainingSimulatorTab({
             </div>
 
             {trainingLogs.length > 1 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-mono font-semibold text-slate-700">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <div className="text-xs font-mono font-bold text-slate-800">
                     3D Loss &amp; Accuracy Convergence Ribbon
                   </div>
-                  <svg viewBox="0 0 380 175" className="w-full h-44 bg-white rounded-xl border border-slate-200">
+                  <svg viewBox="0 0 480 235" className="w-full h-64 bg-white rounded-xl border border-slate-200 overflow-visible">
                     {/* 3D isometric stage floor & back plane */}
-                    <polygon points="52,130 66,118 362,118 348,130" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.8" />
-                    <polygon points="52,22 66,10 66,118 52,130" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="0.8" />
-                    <line x1="66" y1="16" x2="362" y2="16" stroke="#e2e8f0" strokeDasharray="3 3" />
-                    <line x1="66" y1="67" x2="362" y2="67" stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <polygon points="62,184 78,170 456,170 440,184" fill={CHART_COLORS.stageFloor} stroke={CHART_COLORS.stageStroke} strokeWidth="0.9" />
+                    <polygon points="62,30 78,16 78,170 62,184" fill={CHART_COLORS.backPlane} stroke={CHART_COLORS.gridLine} strokeWidth="0.9" />
+                    {[0, 25, 50, 75, 100].map((pct) => {
+                      const y = 180 - (pct / 100) * 136;
+                      return (
+                        <g key={pct}>
+                          <line
+                            x1={pct === 0 ? 62 : 78}
+                            y1={y}
+                            x2={pct === 0 ? 440 : 456}
+                            y2={y}
+                            stroke={pct === 0 ? CHART_COLORS.stageStroke : CHART_COLORS.gridLine}
+                            strokeDasharray={pct === 0 ? undefined : '3 3'}
+                          />
+                          <text x="53" y={y + 4} textAnchor="end" fontSize="11.5" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="600">
+                            {pct}%
+                          </text>
+                        </g>
+                      );
+                    })}
                     {/* 3D Coordinate Axes (+X, +Y, +Z) */}
-                    <line x1="52" y1="130" x2="356" y2="130" stroke="#e11d48" strokeWidth="1.2" />
-                    <line x1="52" y1="130" x2="52" y2="18" stroke="#059669" strokeWidth="1.2" />
-                    <line x1="52" y1="130" x2="66" y2="118" stroke="#2563eb" strokeWidth="1.2" />
-                    <text x="46" y="25" textAnchor="end" fontSize="8.5" fill="#475569" fontFamily="monospace">100%</text>
-                    <text x="46" y="75" textAnchor="end" fontSize="8.5" fill="#475569" fontFamily="monospace">50%</text>
-                    <text x="46" y="131" textAnchor="end" fontSize="8.5" fill="#475569" fontFamily="monospace">0%</text>
-                    <text x="54" y="12" fontSize="7.5" fontWeight="bold" fill="#059669" fontFamily="monospace">+Y: Score/Loss</text>
-                    <text x="72" y="114" fontSize="7.5" fontWeight="bold" fill="#2563eb" fontFamily="monospace">+Z: Depth</text>
+                    <line x1="62" y1="184" x2="448" y2="184" stroke={CHART_COLORS.axisX} strokeWidth="1.5" />
+                    <line x1="62" y1="184" x2="62" y2="24" stroke={CHART_COLORS.axisY} strokeWidth="1.5" />
+                    <line x1="62" y1="184" x2="78" y2="170" stroke={CHART_COLORS.axisZ} strokeWidth="1.5" />
+                    <text x="68" y="16" fontSize="11" fontWeight="700" fill={CHART_COLORS.axisYLabel} fontFamily={CHART_FONTS.sans}>+Y: Score / Loss</text>
+                    <text x="84" y="164" fontSize="10.5" fontWeight="700" fill={CHART_COLORS.axisZLabel} fontFamily={CHART_FONTS.sans}>+Z: Depth</text>
                     {(() => {
                       const maxL = Math.max(1.5, ...trainingLogs.map((l) => l.loss * 1.05));
-                      const stepX = 282 / Math.max(1, trainingLogs.length - 1);
-                      const dx = 12;
-                      const dy = -10;
+                      const stepX = 360 / Math.max(1, trainingLogs.length - 1);
+                      const dx = 14;
+                      const dy = -12;
                       const lossArr = trainingLogs.map((l, i) => ({
-                        x: 56 + i * stepX,
-                        y: 128 - (l.loss / maxL) * 98
+                        x: 68 + i * stepX,
+                        y: 180 - (l.loss / maxL) * 136
                       }));
                       const accArr = trainingLogs.map((l, i) => ({
-                        x: 56 + i * stepX,
-                        y: 128 - l.accuracy * 98
+                        x: 68 + i * stepX,
+                        y: 180 - l.accuracy * 136
                       }));
                       const valArr = trainingLogs.map((l, i) => ({
-                        x: 56 + i * stepX,
-                        y: 128 - l.valAcc * 98
+                        x: 68 + i * stepX,
+                        y: 180 - l.valAcc * 136
                       }));
                       const lossRibbon = [
                         ...lossArr.map((p) => `${p.x + dx},${p.y + dy}`),
@@ -778,88 +830,100 @@ export default function MLTrainingSimulatorTab({
                       ].join(' ');
                       const accArea = [
                         ...accArr.map((p) => `${p.x},${p.y}`),
-                        `${accArr[accArr.length - 1].x},128`,
-                        `${accArr[0].x},128`
+                        `${accArr[accArr.length - 1].x},180`,
+                        `${accArr[0].x},180`
                       ].join(' ');
 
                       return (
                         <>
                           <polygon points={accArea} fill="#10b981" fillOpacity="0.1" />
-                          <polygon points={lossRibbon} fill="#3b82f6" fillOpacity="0.22" stroke="#1e3a8a" strokeWidth="0.6" />
-                          <polygon points={accRibbon} fill="#10b981" fillOpacity="0.25" stroke="#065f46" strokeWidth="0.6" />
+                          <polygon points={lossRibbon} fill="#2563eb" fillOpacity="0.22" stroke="#1e3a8a" strokeWidth="0.7" />
+                          <polygon points={accRibbon} fill="#10b981" fillOpacity="0.25" stroke="#065f46" strokeWidth="0.7" />
                           <polyline
                             fill="none"
-                            stroke="#1e3a8a"
-                            strokeWidth="2.4"
+                            stroke="#1d4ed8"
+                            strokeWidth="2.8"
+                            strokeLinecap="round"
                             points={lossArr.map((p) => `${p.x + dx},${p.y + dy}`).join(' ')}
                           />
                           <polyline
                             fill="none"
-                            stroke="#065f46"
-                            strokeWidth="2.5"
+                            stroke="#059669"
+                            strokeWidth="2.8"
+                            strokeLinecap="round"
                             points={accArr.map((p) => `${p.x},${p.y}`).join(' ')}
                           />
                           <polyline
                             fill="none"
-                            stroke="#9f1239"
-                            strokeWidth="2"
-                            strokeDasharray="5 3"
+                            stroke="#be123c"
+                            strokeWidth="2.4"
+                            strokeDasharray="6 4"
                             points={valArr.map((p) => `${p.x},${p.y}`).join(' ')}
                           />
                         </>
                       );
                     })()}
-                    <text x="12" y="148" fontSize="7.5" fill="#64748b" fontFamily="monospace">(0,0,0)</text>
-                    <text x="58" y="160" textAnchor="middle" fontSize="8.5" fill="#475569" fontFamily="monospace">E1</text>
-                    <text x="195" y="160" textAnchor="middle" fontSize="7.5" fontWeight="bold" fill="#e11d48" fontFamily="monospace">+X: Epoch</text>
-                    <text x="338" y="160" textAnchor="middle" fontSize="8.5" fill="#475569" fontFamily="monospace">
+                    <text x="68" y="212" textAnchor="middle" fontSize="11.5" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="600">E1</text>
+                    <text x="248" y="214" textAnchor="middle" fontSize="11.5" fontWeight="700" fill={CHART_COLORS.axisXLabel} fontFamily={CHART_FONTS.sans}>+X: Training Epoch</text>
+                    <text x="428" y="212" textAnchor="middle" fontSize="11.5" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="600">
                       E{trainingLogs[trainingLogs.length - 1]?.epoch}
                     </text>
                   </svg>
                 </div>
 
                 {/* Live 3D Validation Accuracy Bar Chart */}
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-mono font-semibold text-emerald-900">
+                <div className="space-y-2">
+                  <div className="text-xs font-mono font-bold text-emerald-900">
                     3D Validation Accuracy Bar Chart (% per Epoch)
                   </div>
-                  <svg viewBox="0 0 380 175" className="w-full h-44 bg-white rounded-xl border border-slate-200">
+                  <svg viewBox="0 0 480 235" className="w-full h-64 bg-white rounded-xl border border-slate-200 overflow-visible">
                     {/* 3D Isometric base grid */}
-                    <polygon points="52,130 62,122 362,122 352,130" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="0.8" />
-                    <line x1="62" y1="22" x2="362" y2="22" stroke="#e2e8f0" strokeDasharray="3 3" />
-                    <line x1="62" y1="72" x2="362" y2="72" stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <polygon points="62,184 76,172 456,172 442,184" fill={CHART_COLORS.stageFloor} stroke={CHART_COLORS.stageStroke} strokeWidth="0.9" />
+                    {[0, 25, 50, 75, 100].map((pct) => {
+                      const y = 180 - (pct / 100) * 136;
+                      return (
+                        <g key={pct}>
+                          <line
+                            x1={pct === 0 ? 62 : 76}
+                            y1={y}
+                            x2={pct === 0 ? 442 : 456}
+                            y2={y}
+                            stroke={pct === 0 ? CHART_COLORS.stageStroke : CHART_COLORS.gridLine}
+                            strokeDasharray={pct === 0 ? undefined : '3 3'}
+                          />
+                          <text x="53" y={y + 4} textAnchor="end" fontSize="11.5" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="600">
+                            {pct}%
+                          </text>
+                        </g>
+                      );
+                    })}
                     {/* 3D Coordinate Axes (+X, +Y, +Z) */}
-                    <line x1="52" y1="130" x2="356" y2="130" stroke="#e11d48" strokeWidth="1.2" />
-                    <line x1="52" y1="130" x2="52" y2="18" stroke="#059669" strokeWidth="1.2" />
-                    <line x1="52" y1="130" x2="62" y2="122" stroke="#2563eb" strokeWidth="1.2" />
-                    <text x="46" y="25" textAnchor="end" fontSize="8.5" fill="#475569" fontFamily="monospace">100%</text>
-                    <text x="46" y="75" textAnchor="end" fontSize="8.5" fill="#475569" fontFamily="monospace">50%</text>
-                    <text x="46" y="131" textAnchor="end" fontSize="8.5" fill="#475569" fontFamily="monospace">0%</text>
-                    <text x="54" y="12" fontSize="7.5" fontWeight="bold" fill="#059669" fontFamily="monospace">+Y: Val %</text>
-                    <text x="364" y="133" fontSize="7.5" fontWeight="bold" fill="#e11d48" fontFamily="monospace">+X</text>
-                    <text x="68" y="118" fontSize="7.5" fontWeight="bold" fill="#2563eb" fontFamily="monospace">+Z</text>
-                    <text x="12" y="148" fontSize="7.5" fill="#64748b" fontFamily="monospace">(0,0,0)</text>
+                    <line x1="62" y1="184" x2="448" y2="184" stroke={CHART_COLORS.axisX} strokeWidth="1.5" />
+                    <line x1="62" y1="184" x2="62" y2="24" stroke={CHART_COLORS.axisY} strokeWidth="1.5" />
+                    <line x1="62" y1="184" x2="76" y2="172" stroke={CHART_COLORS.axisZ} strokeWidth="1.5" />
+                    <text x="68" y="16" fontSize="11" fontWeight="700" fill={CHART_COLORS.axisYLabel} fontFamily={CHART_FONTS.sans}>+Y: Val Accuracy %</text>
+                    <text x="452" y="188" fontSize="11" fontWeight="700" fill={CHART_COLORS.axisXLabel} fontFamily={CHART_FONTS.sans}>+X</text>
                     {trainingLogs.map((l, idx) => {
-                      const slotW = 288 / Math.max(1, trainingLogs.length);
-                      const barW = Math.min(15, slotW * 0.54);
-                      const x = 56 + idx * slotW + (slotW - barW) / 2;
-                      const barH = Math.max(5, l.valAcc * 92);
-                      const y = 128 - barH;
-                      const dx = 6;
-                      const dy = -5;
+                      const slotW = 368 / Math.max(1, trainingLogs.length);
+                      const barW = Math.min(24, slotW * 0.56);
+                      const x = 70 + idx * slotW + (slotW - barW) / 2;
+                      const barH = Math.max(8, l.valAcc * 136);
+                      const y = 180 - barH;
+                      const dx = 8;
+                      const dy = -6;
                       const isHigh = l.valAcc >= 0.94;
-                      const frontCol = isHigh ? '#059669' : '#4f46e5';
-                      const topCol = isHigh ? '#34d399' : '#818cf8';
-                      const sideCol = isHigh ? '#065f46' : '#312e81';
+                      const frontCol = isHigh ? CHART_COLORS.emeraldFront : CHART_COLORS.indigoFront;
+                      const topCol = isHigh ? CHART_COLORS.emeraldTop : CHART_COLORS.indigoTop;
+                      const sideCol = isHigh ? CHART_COLORS.emeraldSide : CHART_COLORS.indigoSide;
                       const topPts = `${x},${y} ${x + dx},${y + dy} ${x + barW + dx},${y + dy} ${x + barW},${y}`;
                       const sidePts = `${x + barW},${y} ${x + barW + dx},${y + dy} ${x + barW + dx},${y + barH + dy} ${x + barW},${y + barH}`;
-                      const labelOffsetY = idx % 2 === 1 ? -11 : 0;
-                      const labelY = y + dy - 4 + labelOffsetY;
+                      const labelOffsetY = idx % 2 === 1 ? -14 : 0;
+                      const labelY = Math.max(18, y + dy - 5 + labelOffsetY);
                       return (
                         <g key={l.epoch}>
                           <polygon points={topPts} fill={topCol} />
                           <polygon points={sidePts} fill={sideCol} />
-                          <rect x={x} y={y} width={barW} height={barH} fill={frontCol} rx="1" />
+                          <rect x={x} y={y} width={barW} height={barH} fill={frontCol} rx="1.5" />
                           {trainingLogs.length <= 12 && (
                             <>
                               {idx % 2 === 1 && (
@@ -867,23 +931,23 @@ export default function MLTrainingSimulatorTab({
                                   x1={x + barW / 2 + dx * 0.4}
                                   y1={y + dy}
                                   x2={x + barW / 2 + dx * 0.4}
-                                  y2={labelY + 2}
+                                  y2={labelY + 3}
                                   stroke="#94a3b8"
-                                  strokeWidth="0.7"
-                                  strokeDasharray="1.5 1.5"
+                                  strokeWidth="0.9"
+                                  strokeDasharray="2 2"
                                 />
                               )}
                               <text
                                 x={x + barW / 2 + dx * 0.4}
                                 y={labelY}
                                 textAnchor="middle"
-                                fontSize="7.5"
-                                fontFamily="monospace"
-                                fontWeight="bold"
-                                fill="#065f46"
+                                fontSize="11"
+                                fontFamily={CHART_FONTS.mono}
+                                fontWeight="700"
+                                fill={isHigh ? '#065f46' : '#312e81'}
                                 style={{ paintOrder: 'stroke' }}
                                 stroke="#ffffff"
-                                strokeWidth="2.5"
+                                strokeWidth="3.5"
                               >
                                 {(l.valAcc * 100).toFixed(0)}%
                               </text>
@@ -891,11 +955,12 @@ export default function MLTrainingSimulatorTab({
                           )}
                           <text
                             x={x + barW / 2}
-                            y="156"
+                            y="212"
                             textAnchor="middle"
-                            fontSize="8"
-                            fontFamily="monospace"
-                            fill="#475569"
+                            fontSize="11.5"
+                            fontFamily={CHART_FONTS.mono}
+                            fontWeight="600"
+                            fill={CHART_COLORS.tickText}
                           >
                             E{l.epoch}
                           </text>
@@ -928,7 +993,9 @@ export default function MLTrainingSimulatorTab({
                     : 'bg-amber-50 text-amber-900 border-amber-300'
                 }`}
               >
-                {slaPass ? 'CIDR <200ms SLA PASSED · PQC HARDENED' : 'HIGH LATENCY WARNING'}
+                {slaPass
+                  ? `1.5B→2.41B HFT <15ms SLA PASSED (${activeYr20Headroom}x Yr-20 Headroom)`
+                  : `CAPACITY / TAIL ALERT (${activeYr20Headroom}x Yr-20 · P99 ${displayP99Latency}ms)`}
               </span>
             </div>
 
@@ -943,31 +1010,31 @@ export default function MLTrainingSimulatorTab({
                 <p className="text-slate-600 text-[11px]">
                   {isCrossModality
                     ? 'Cross-modality stress evaluated; native modality gives higher TAR.'
-                    : 'Aligned native modality achieves optimal calibration stability.'}
+                    : `Cosine WSD (${simConfig.epochs} ep) + 5-yr EWC replay preserves calibration.`}
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                 <span className="font-mono text-[11px] text-slate-500 block">
-                  Runtime &amp; Concurrency Fit
+                  Runtime &amp; VRAM Compression
                 </span>
                 <p className="font-bold text-slate-900">
                   {activeProgMeta.shortName}: P95 {displayLatency}ms · P99 {displayP99Latency}ms
                 </p>
                 <p className="text-slate-600 text-[11px]">
-                  {activeProgMeta.concurrencyModel} · {activeProgMeta.costIndex} TCO
+                  {scaleMetrics.vramPerShardGb} GB/shard ({scaleMetrics.clusterTotalHbmGb} GB HBM · -{scaleMetrics.vramSavingsPct}% vs FP32)
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                 <span className="font-mono text-[11px] text-slate-500 block">
-                  2046 (Year +20) Readiness
+                  2046 (Yr +20) Growth &amp; Usage
                 </span>
                 <p className="font-bold text-slate-900">
-                  {year20Point.populationNominalB}B Pop (Max {year20Point.populationUpperB}B)
+                  {year20Point.populationNominalB}B Pop · {year20Point.systemLoadFactor}x System Load
                 </p>
                 <p className="text-slate-600 text-[11px]">
-                  {year20Point.peakQps.toLocaleString()} QPS · Acc: {year20Point.expectedAccPct}%
+                  {year20Point.peakQps.toLocaleString()} Peak QPS ({year20Point.requiredShards} shards) · Acc: {year20Point.expectedAccPct}%
                 </p>
               </div>
 
@@ -986,6 +1053,21 @@ export default function MLTrainingSimulatorTab({
           </div>
         </div>
       </div>
+
+      {/* Post-Training Real-Data Inference, Confidence, Recommendation & Complementary Methods */}
+      <RealDataInferencePanel
+        project={activeSimProject}
+        dataType={simConfig.dataType}
+        mlTechnique={simConfig.mlTechnique}
+        programmingArch={simConfig.programmingArch}
+        encryptionProfile={simConfig.encryptionProfile}
+        isTraining={isTraining}
+        trainingEpochsCompleted={trainingEpoch}
+        targetEpochs={simConfig.epochs}
+        trainedValAcc={displayValAcc}
+        trainedLoss={displayLoss}
+        onRequestTrainModel={() => onStartTraining(simConfig)}
+      />
 
       {/* Multi-Technique Visual Analytics Suite (Val Acc Bar, Time-Series, k=9 / K-Means, Vectors, Tensors) */}
       <SimulatorMultiModalCharts
@@ -1077,20 +1159,21 @@ export default function MLTrainingSimulatorTab({
                       const m = SYNTHETIC_DATA_TYPE_META[dt];
                       const isNative = dt === activeProfile.defaultDataType;
                       const isSelected = dt === simConfig.dataType;
-                      const estAcc = Math.min(
-                        0.995,
-                        Math.max(0.75, baseProjAcc + m.accBias - (isNative ? 0 : 0.032))
-                      );
-                      const estLoss = Number(((isNative ? 0.14 : 0.24) * m.lossMult).toFixed(3));
-                      const estTput = Math.round(
-                        m.throughputBase * activeProgMeta.throughputMultiplier * activeEncMeta.throughputMultiplier
-                      );
-                      const dtLat = computeLatencyP95P99(
-                        simConfig.programmingArch,
-                        dt,
-                        simConfig.mlTechnique,
-                        simConfig.encryptionProfile
-                      );
+                      const rowScale = computeScale1B5Metrics({
+                        project: activeSimProject,
+                        dataType: dt,
+                        variant: simConfig.syntheticVariant,
+                        progArch: simConfig.programmingArch,
+                        mlTech: simConfig.mlTechnique,
+                        encProfile: simConfig.encryptionProfile,
+                        learningRate: simConfig.learningRate,
+                        batchSize: simConfig.batchSize,
+                        epochs: simConfig.epochs,
+                        optimizer: simConfig.optimizer,
+                        sampleCount: simConfig.sampleCount,
+                        annualDeltaPct: simConfig.annualDeltaPct,
+                        horizonYears: simConfig.horizonYears
+                      });
 
                       return (
                         <tr
@@ -1113,16 +1196,16 @@ export default function MLTrainingSimulatorTab({
                           </td>
                           <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">{m.tensorShape}</td>
                           <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
-                            {(estAcc * 100).toFixed(2)}%
+                            {(rowScale.optimizedValAcc * 100).toFixed(2)}%
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-blue-900">{estLoss}</td>
-                          <td className="py-2.5 px-3 font-mono text-slate-800">{estTput.toLocaleString()}/s</td>
+                          <td className="py-2.5 px-3 font-mono text-blue-900">{rowScale.optimizedLoss}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-800">{rowScale.optimizedThroughput.toLocaleString()}/s</td>
                           <td className="py-2.5 px-3 font-mono text-slate-800 whitespace-nowrap">
-                            <span>{dtLat.p95Ms}</span>
+                            <span>{rowScale.p95Ms}</span>
                             <span className="text-slate-400 mx-1">/</span>
-                            <span className="text-rose-800 font-semibold">{dtLat.p99Ms} ms</span>
+                            <span className="text-rose-800 font-semibold">{rowScale.p99Ms} ms</span>
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-700">{m.vramGb} GB</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-700">{rowScale.vramPerShardGb} GB/sh</td>
                           <td className="py-2.5 px-3 text-[11px] font-mono">
                             {isNative ? 'Optimal Fit' : 'Cross-Modal Adapter'}
                           </td>
@@ -1177,7 +1260,7 @@ export default function MLTrainingSimulatorTab({
                     {(Object.keys(SYNTHETIC_VARIANT_META) as SyntheticVariant[]).map((v) => {
                       const vm = SYNTHETIC_VARIANT_META[v];
                       const isSel = v === simConfig.syntheticVariant;
-                      const estAcc = Math.min(0.995, Math.max(0.74, baseProjAcc + vm.accOffset));
+                      const estAcc = Math.min(0.996, Math.max(0.76, scaleMetrics.optimizedValAcc + vm.accOffset * 0.55));
                       return (
                         <tr key={v} className={isSel ? 'bg-indigo-50/70' : 'hover:bg-slate-50'}>
                           <td className="py-2.5 px-3">
@@ -1236,33 +1319,32 @@ export default function MLTrainingSimulatorTab({
               </div>
 
               {/* 3D Extruded Cohort Fan & Milestone Pillar Chart */}
-              <svg viewBox="0 0 700 212" className="w-full h-52 bg-slate-50 rounded-xl border border-slate-200">
+              <svg viewBox="0 0 760 265" className="w-full h-72 bg-slate-50 rounded-xl border border-slate-200 overflow-visible">
                 {/* 3D stage floor & back grid */}
-                <polygon points="62,162 80,146 668,146 650,162" fill="#e2e8f0" fillOpacity="0.45" stroke="#cbd5e1" strokeWidth="0.9" />
-                <line x1="80" y1="32" x2="668" y2="32" stroke="#e2e8f0" strokeDasharray="3 3" />
-                <line x1="80" y1="88" x2="668" y2="88" stroke="#e2e8f0" strokeDasharray="3 3" />
+                <polygon points="74,206 94,188 718,188 698,206" fill={CHART_COLORS.stageFloor} fillOpacity="0.6" stroke={CHART_COLORS.stageStroke} strokeWidth="0.9" />
+                <line x1="94" y1="38" x2="718" y2="38" stroke={CHART_COLORS.gridLine} strokeDasharray="4 4" />
+                <line x1="94" y1="114" x2="718" y2="114" stroke={CHART_COLORS.gridLine} strokeDasharray="4 4" />
                 {/* 3D Coordinate Axes (+X, +Y, +Z) */}
-                <line x1="62" y1="162" x2="660" y2="162" stroke="#e11d48" strokeWidth="1.3" />
-                <line x1="62" y1="162" x2="62" y2="20" stroke="#059669" strokeWidth="1.3" />
-                <line x1="62" y1="162" x2="80" y2="146" stroke="#2563eb" strokeWidth="1.3" />
-                <text x="54" y="36" textAnchor="end" fontSize="9" fill="#475569" fontFamily="monospace">2.60B</text>
-                <text x="54" y="92" textAnchor="end" fontSize="9" fill="#475569" fontFamily="monospace">1.95B</text>
-                <text x="54" y="160" textAnchor="end" fontSize="9" fill="#475569" fontFamily="monospace">1.30B</text>
-                <text x="68" y="15" fontSize="8" fontWeight="bold" fill="#059669" fontFamily="monospace">+Y: Cohort (B)</text>
-                <text x="86" y="142" fontSize="8" fontWeight="bold" fill="#2563eb" fontFamily="monospace">+Z: ±Δ Envelope</text>
-                <text x="14" y="178" fontSize="8" fill="#64748b" fontFamily="monospace">(0,0,0)</text>
-                <text x="664" y="165" fontSize="8" fontWeight="bold" fill="#e11d48" fontFamily="monospace">+X: Yr</text>
+                <line x1="74" y1="206" x2="708" y2="206" stroke={CHART_COLORS.axisX} strokeWidth="1.6" />
+                <line x1="74" y1="206" x2="74" y2="24" stroke={CHART_COLORS.axisY} strokeWidth="1.6" />
+                <line x1="74" y1="206" x2="94" y2="188" stroke={CHART_COLORS.axisZ} strokeWidth="1.6" />
+                <text x="64" y="42" textAnchor="end" fontSize="12" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="700">2.60B</text>
+                <text x="64" y="118" textAnchor="end" fontSize="12" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="700">1.95B</text>
+                <text x="64" y="206" textAnchor="end" fontSize="12" fill={CHART_COLORS.tickText} fontFamily={CHART_FONTS.mono} fontWeight="700">1.30B</text>
+                <text x="82" y="18" fontSize="11.5" fontWeight="700" fill={CHART_COLORS.axisYLabel} fontFamily={CHART_FONTS.sans}>+Y: Cohort (Billions)</text>
+                <text x="102" y="182" fontSize="11" fontWeight="700" fill={CHART_COLORS.axisZLabel} fontFamily={CHART_FONTS.sans}>+Z: ±Δ Bound Envelope</text>
+                <text x="712" y="210" fontSize="11.5" fontWeight="700" fill={CHART_COLORS.axisXLabel} fontFamily={CHART_FONTS.sans}>+X</text>
                 {(() => {
                   const maxPop = Math.max(2550, ...horizonPoints.map((p) => p.populationUpperM));
                   const minPop = 1200;
-                  const mapY = (val: number) => 158 - ((val - minPop) / (maxPop - minPop)) * 116;
-                  const stepX = 562 / Math.max(1, horizonPoints.length - 1);
-                  const dx = 14;
-                  const dy = -12;
+                  const mapY = (val: number) => 202 - ((val - minPop) / (maxPop - minPop)) * 150;
+                  const stepX = 602 / Math.max(1, horizonPoints.length - 1);
+                  const dx = 16;
+                  const dy = -14;
 
-                  const upperArr = horizonPoints.map((p, i) => ({ x: 68 + i * stepX + dx, y: mapY(p.populationUpperM) + dy }));
-                  const nomArr = horizonPoints.map((p, i) => ({ x: 68 + i * stepX + dx * 0.5, y: mapY(p.populationNominalM) + dy * 0.5 }));
-                  const lowerArr = horizonPoints.map((p, i) => ({ x: 68 + i * stepX, y: mapY(p.populationLowerM) }));
+                  const upperArr = horizonPoints.map((p, i) => ({ x: 84 + i * stepX + dx, y: mapY(p.populationUpperM) + dy }));
+                  const nomArr = horizonPoints.map((p, i) => ({ x: 84 + i * stepX + dx * 0.5, y: mapY(p.populationNominalM) + dy * 0.5 }));
+                  const lowerArr = horizonPoints.map((p, i) => ({ x: 84 + i * stepX, y: mapY(p.populationLowerM) }));
 
                   const upperBand = [
                     ...upperArr.map((p) => `${p.x},${p.y}`),
@@ -1283,46 +1365,45 @@ export default function MLTrainingSimulatorTab({
                       {/* 3D Extruded Milestone Cohort Pillars */}
                       {milestones.map((m) => {
                         const idx = horizonPoints.findIndex((hp) => hp.yearOffset === m.yearOffset);
-                        const bx = 68 + idx * stepX - 7;
+                        const bx = 84 + idx * stepX - 9;
                         const by = mapY(m.populationNominalM);
-                        const bh = Math.max(8, 160 - by);
-                        const bw = 16;
-                        const pdx = 7;
-                        const pdy = -6;
-                        // Position label cleanly above upper curve to never cross curve lines
+                        const bh = Math.max(10, 204 - by);
+                        const bw = 20;
+                        const pdx = 8;
+                        const pdy = -7;
                         const upperY = upperArr[idx]?.y ?? by;
-                        const labelY = Math.max(18, Math.min(by + pdy - 6, upperY - 9));
+                        const labelY = Math.max(22, Math.min(by + pdy - 8, upperY - 12));
                         return (
                           <g key={m.yearOffset}>
                             <polygon
                               points={`${bx},${by} ${bx + pdx},${by + pdy} ${bx + bw + pdx},${by + pdy} ${bx + bw},${by}`}
-                              fill="#818cf8"
+                              fill={CHART_COLORS.indigoTop}
                             />
                             <polygon
                               points={`${bx + bw},${by} ${bx + bw + pdx},${by + pdy} ${bx + bw + pdx},${by + bh + pdy} ${bx + bw},${by + bh}`}
-                              fill="#312e81"
+                              fill={CHART_COLORS.indigoSide}
                             />
-                            <rect x={bx} y={by} width={bw} height={bh} fill="#4f46e5" fillOpacity="0.88" rx="1" />
+                            <rect x={bx} y={by} width={bw} height={bh} fill={CHART_COLORS.indigoFront} fillOpacity="0.9" rx="1.5" />
                             <line
-                              x1={bx + bw / 2 + 3}
+                              x1={bx + bw / 2 + 4}
                               y1={by + pdy}
-                              x2={bx + bw / 2 + 3}
-                              y2={labelY + 2}
+                              x2={bx + bw / 2 + 4}
+                              y2={labelY + 3}
                               stroke="#6366f1"
-                              strokeWidth="0.7"
+                              strokeWidth="1"
                               strokeDasharray="2 2"
                             />
                             <text
-                              x={bx + bw / 2 + 3}
+                              x={bx + bw / 2 + 4}
                               y={labelY}
                               textAnchor="middle"
-                              fontSize="8.5"
-                              fontWeight="bold"
-                              fontFamily="monospace"
+                              fontSize="12"
+                              fontWeight="700"
+                              fontFamily={CHART_FONTS.mono}
                               fill="#1e1b4b"
                               style={{ paintOrder: 'stroke' }}
-                              stroke="#f8fafc"
-                              strokeWidth="3"
+                              stroke="#ffffff"
+                              strokeWidth="3.5"
                             >
                               {m.populationNominalB}B
                             </text>
@@ -1330,21 +1411,22 @@ export default function MLTrainingSimulatorTab({
                         );
                       })}
 
-                      <polyline fill="none" stroke="#9f1239" strokeWidth="2" strokeDasharray="5 3" points={upperArr.map((p) => `${p.x},${p.y}`).join(' ')} />
-                      <polyline fill="none" stroke="#3730a3" strokeWidth="2.8" points={nomArr.map((p) => `${p.x},${p.y}`).join(' ')} />
-                      <polyline fill="none" stroke="#065f46" strokeWidth="2" strokeDasharray="4 3" points={lowerArr.map((p) => `${p.x},${p.y}`).join(' ')} />
+                      <polyline fill="none" stroke="#9f1239" strokeWidth="2.4" strokeDasharray="6 4" points={upperArr.map((p) => `${p.x},${p.y}`).join(' ')} />
+                      <polyline fill="none" stroke="#312e81" strokeWidth="3.2" points={nomArr.map((p) => `${p.x},${p.y}`).join(' ')} />
+                      <polyline fill="none" stroke="#065f46" strokeWidth="2.4" strokeDasharray="5 3" points={lowerArr.map((p) => `${p.x},${p.y}`).join(' ')} />
                     </>
                   );
                 })()}
                 {[0, 5, 10, 15, 20].map((yr) => (
                   <text
                     key={yr}
-                    x={68 + (yr / 20) * 562}
-                    y="192"
+                    x={84 + (yr / 20) * 602}
+                    y="238"
                     textAnchor="middle"
-                    fontSize="9"
-                    fill="#475569"
-                    fontFamily="monospace"
+                    fontSize="12"
+                    fontWeight="600"
+                    fill={CHART_COLORS.tickText}
+                    fontFamily={CHART_FONTS.mono}
                   >
                     {2026 + yr} (Yr {yr})
                   </text>
@@ -1353,16 +1435,15 @@ export default function MLTrainingSimulatorTab({
 
               {/* Milestone Projection Table */}
               <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left border-collapse text-xs font-mono">
+                <table className="w-full text-left border-collapse text-xs font-mono tabular-nums">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
                       <th className="py-2 px-3">Horizon Milestone</th>
-                      <th className="py-2 px-3">Nominal Cohort</th>
-                      <th className="py-2 px-3">Upper (+Δ) / Lower (-Δ)</th>
-                      <th className="py-2 px-3">Daily Auth Calls</th>
-                      <th className="py-2 px-3">Peak QPS</th>
-                      <th className="py-2 px-3">Hot Tier TB</th>
-                      <th className="py-2 px-3">Warm+Cold Tier</th>
+                      <th className="py-2 px-3">Nominal / Bounds</th>
+                      <th className="py-2 px-3">System Usage Growth</th>
+                      <th className="py-2 px-3">Daily Calls / Peak QPS</th>
+                      <th className="py-2 px-3">Shards · VRAM/sh</th>
+                      <th className="py-2 px-3">Hot / Warm+Cold TB</th>
                       <th className="py-2 px-3">Recalibrated Acc</th>
                     </tr>
                   </thead>
@@ -1372,16 +1453,23 @@ export default function MLTrainingSimulatorTab({
                       .map((p) => (
                         <tr key={p.yearOffset} className="hover:bg-slate-50">
                           <td className="py-2 px-3 font-bold text-slate-900">
-                            Year +{p.yearOffset} ({p.calendarYear})
+                            Yr +{p.yearOffset} ({p.calendarYear})
                           </td>
-                          <td className="py-2 px-3 font-bold text-indigo-800">{p.populationNominalB}B</td>
                           <td className="py-2 px-3 text-slate-700">
-                            {p.populationUpperB}B / {p.populationLowerB}B
+                            <strong className="text-indigo-800">{p.populationNominalB}B</strong> ({p.populationLowerB}–{p.populationUpperB}B)
                           </td>
-                          <td className="py-2 px-3 text-slate-800">{p.dailyAuthCallsB}B / day</td>
-                          <td className="py-2 px-3 text-blue-900 font-semibold">{p.peakQps.toLocaleString()}</td>
-                          <td className="py-2 px-3 text-slate-700">{p.hotStorageTb.toLocaleString()} TB</td>
-                          <td className="py-2 px-3 text-slate-700">{p.warmColdStorageTb.toLocaleString()} TB</td>
+                          <td className="py-2 px-3 text-slate-800">
+                            <strong className="text-blue-900">{p.systemLoadFactor}x</strong> ({p.usageIntensityMult}x intensity)
+                          </td>
+                          <td className="py-2 px-3 text-slate-800">
+                            {p.dailyAuthCallsB}B/d · <strong className="text-blue-900">{p.peakQps.toLocaleString()} QPS</strong>
+                          </td>
+                          <td className="py-2 px-3 text-slate-800">
+                            {p.requiredShards} sh · <strong>{p.vramPerShardGb} GB</strong>
+                          </td>
+                          <td className="py-2 px-3 text-slate-700">
+                            {p.hotStorageTb.toLocaleString()} / {p.warmColdStorageTb.toLocaleString()} TB
+                          </td>
                           <td className="py-2 px-3 font-bold text-emerald-800">{p.expectedAccPct}%</td>
                         </tr>
                       ))}
@@ -1421,15 +1509,21 @@ export default function MLTrainingSimulatorTab({
                       const arch = PROGRAMMING_ARCHITECTURE_META[archId];
                       const isSel = archId === simConfig.programmingArch;
                       const isBest = archId === bestProgArch;
-                      const archTput = Math.round(
-                        activeTypeMeta.throughputBase * arch.throughputMultiplier * activeEncMeta.throughputMultiplier
-                      );
-                      const archLatStats = computeLatencyP95P99(
-                        archId,
-                        simConfig.dataType,
-                        simConfig.mlTechnique,
-                        simConfig.encryptionProfile
-                      );
+                      const archScale = computeScale1B5Metrics({
+                        project: activeSimProject,
+                        dataType: simConfig.dataType,
+                        variant: simConfig.syntheticVariant,
+                        progArch: archId,
+                        mlTech: simConfig.mlTechnique,
+                        encProfile: simConfig.encryptionProfile,
+                        learningRate: simConfig.learningRate,
+                        batchSize: simConfig.batchSize,
+                        epochs: simConfig.epochs,
+                        optimizer: simConfig.optimizer,
+                        sampleCount: simConfig.sampleCount,
+                        annualDeltaPct: simConfig.annualDeltaPct,
+                        horizonYears: simConfig.horizonYears
+                      });
                       return (
                         <tr key={archId} className={isSel ? 'bg-indigo-50/70' : 'hover:bg-slate-50'}>
                           <td className="py-2.5 px-3">
@@ -1450,15 +1544,15 @@ export default function MLTrainingSimulatorTab({
                             <div className="text-indigo-800 font-mono text-[10px] mt-0.5">{arch.platformLockIn}</div>
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-indigo-900 whitespace-nowrap">
-                            {archTput.toLocaleString()}/s
+                            {archScale.optimizedThroughput.toLocaleString()}/s
                           </td>
                           <td className="py-2.5 px-3 font-mono whitespace-nowrap">
                             <div className="font-bold text-emerald-800">
-                              P95: {archLatStats.p95Ms} ms · <span className="text-rose-800">P99: {archLatStats.p99Ms} ms</span>
+                              P95: {archScale.p95Ms} ms · <span className="text-rose-800">P99: {archScale.p99Ms} ms</span>
                             </div>
                             <div className="text-[10px] text-slate-500">±{arch.p99JitterUs} μs tail jitter</div>
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-800 whitespace-nowrap">{arch.memoryFootprintGb} GB</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-800 whitespace-nowrap">{archScale.vramPerShardGb} GB/sh</td>
                           <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap">{arch.costIndex}</td>
                           <td className="py-2.5 px-3 text-right">
                             <button
@@ -1513,13 +1607,21 @@ export default function MLTrainingSimulatorTab({
                       const m = ML_TECHNIQUE_META[techId];
                       const isSel = techId === simConfig.mlTechnique;
                       const isBest = techId === bestMlTech;
-                      const estAcc = Math.min(0.996, Math.max(0.75, baseProjAcc + m.accModifier));
-                      const mlLat = computeLatencyP95P99(
-                        simConfig.programmingArch,
-                        simConfig.dataType,
-                        techId,
-                        simConfig.encryptionProfile
-                      );
+                      const mlScale = computeScale1B5Metrics({
+                        project: activeSimProject,
+                        dataType: simConfig.dataType,
+                        variant: simConfig.syntheticVariant,
+                        progArch: simConfig.programmingArch,
+                        mlTech: techId,
+                        encProfile: simConfig.encryptionProfile,
+                        learningRate: simConfig.learningRate,
+                        batchSize: simConfig.batchSize,
+                        epochs: simConfig.epochs,
+                        optimizer: simConfig.optimizer,
+                        sampleCount: simConfig.sampleCount,
+                        annualDeltaPct: simConfig.annualDeltaPct,
+                        horizonYears: simConfig.horizonYears
+                      });
                       return (
                         <tr key={techId} className={isSel ? 'bg-indigo-50/70' : 'hover:bg-slate-50'}>
                           <td className="py-2.5 px-3 font-semibold text-slate-900">
@@ -1532,11 +1634,11 @@ export default function MLTrainingSimulatorTab({
                           </td>
                           <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">{m.objectiveFormula}</td>
                           <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
-                            {(estAcc * 100).toFixed(2)}%
+                            {(mlScale.optimizedValAcc * 100).toFixed(2)}%
                           </td>
                           <td className="py-2.5 px-3 font-mono text-blue-900">{m.eceScore}</td>
                           <td className="py-2.5 px-3 font-mono text-slate-800 whitespace-nowrap">
-                            {mlLat.p95Ms} / <span className="text-rose-800 font-semibold">{mlLat.p99Ms} ms</span>
+                            {mlScale.p95Ms} / <span className="text-rose-800 font-semibold">{mlScale.p99Ms} ms</span>
                           </td>
                           <td className="py-2.5 px-3 font-mono text-slate-800">{m.trainHours1B5} hrs</td>
                           <td className="py-2.5 px-3 text-[11px] text-slate-600 max-w-xs">{m.strengths}</td>
@@ -1590,7 +1692,21 @@ export default function MLTrainingSimulatorTab({
                     {LEARNING_RATE_PRESETS.map((lr) => {
                       const isSel = Number(simConfig.learningRate) === lr.numericLr;
                       const isBest = lr.id === bestLrPreset.id;
-                      const estAcc = Math.min(0.996, Math.max(0.75, projectedAcc + lr.accBonus));
+                      const lrScale = computeScale1B5Metrics({
+                        project: activeSimProject,
+                        dataType: simConfig.dataType,
+                        variant: simConfig.syntheticVariant,
+                        progArch: simConfig.programmingArch,
+                        mlTech: simConfig.mlTechnique,
+                        encProfile: simConfig.encryptionProfile,
+                        learningRate: lr.lrValue,
+                        batchSize: simConfig.batchSize,
+                        epochs: simConfig.epochs,
+                        optimizer: simConfig.optimizer,
+                        sampleCount: simConfig.sampleCount,
+                        annualDeltaPct: simConfig.annualDeltaPct,
+                        horizonYears: simConfig.horizonYears
+                      });
                       return (
                         <tr key={lr.id} className={isSel ? 'bg-indigo-50/70' : 'hover:bg-slate-50'}>
                           <td className="py-2.5 px-3">
@@ -1609,7 +1725,7 @@ export default function MLTrainingSimulatorTab({
                           <td className="py-2.5 px-3 text-slate-800 whitespace-nowrap">{lr.convergenceSpeed}</td>
                           <td className="py-2.5 px-3 text-[11px] font-mono text-slate-700">{lr.stabilityRisk}</td>
                           <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
-                            {(estAcc * 100).toFixed(2)}%
+                            {(lrScale.optimizedValAcc * 100).toFixed(2)}%
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             <button
@@ -1664,7 +1780,8 @@ export default function MLTrainingSimulatorTab({
                         simConfig.programmingArch,
                         simConfig.dataType,
                         simConfig.mlTechnique,
-                        encId
+                        encId,
+                        simConfig.sampleCount
                       );
                       return (
                         <tr key={encId} className={isSel ? 'bg-indigo-50/70' : 'hover:bg-slate-50'}>

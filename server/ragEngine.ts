@@ -6,6 +6,9 @@ import path from 'path';
 import crypto from 'crypto';
 import type {
   RagAuditEvent,
+  RagBenchmarkCaseResult,
+  RagBenchmarkModeMetrics,
+  RagBenchmarkResponse,
   RagCitation,
   RagDocumentQualityMetrics,
   RagDocumentSummary,
@@ -975,6 +978,190 @@ class HybridFaissBm25Engine {
   public async search(ai: GoogleGenAI, query: string, topK: number = 4): Promise<RagCitation[]> {
     const res = await this.hybridSearch(ai, query, { topK, mode: 'hybrid', alpha: 0.55 });
     return res.results;
+  }
+
+  /**
+   * Evaluate Dense vs BM25 vs Hybrid RRF retrieval quality (Recall@1, @3, @5, MRR, NDCG@5, Faithfulness).
+   * Builds ground-truth benchmark queries directly from salient technical terms in indexed chunks
+   * (or accepts caller-provided query/expectedTerm probes).
+   */
+  public async evaluateRetrievalBenchmark(
+    ai: GoogleGenAI,
+    options?: { maxQueries?: number; alpha?: number }
+  ): Promise<RagBenchmarkResponse> {
+    const N = this.store.vectors.length;
+    const alpha = Math.min(1, Math.max(0, options?.alpha ?? 0.55));
+    const maxQueries = Math.min(12, Math.max(3, options?.maxQueries ?? 6));
+    const denseAvailable = Boolean(process.env.GEMINI_API_KEY) && this.store.embeddingDim > 0;
+
+    if (N === 0) {
+      return {
+        evaluatedAt: new Date().toLocaleTimeString(),
+        totalIndexedChunks: 0,
+        totalIndexedDocs: 0,
+        queryCount: 0,
+        denseAvailable,
+        hybridLiftOverBm25Pct: 0,
+        modeMetrics: (['hybrid', 'dense', 'bm25'] as RagSearchMode[]).map((mode) => ({
+          mode,
+          queriesEvaluated: 0,
+          recallAt1Pct: 0,
+          recallAt3Pct: 0,
+          recallAt5Pct: 0,
+          mrr: 0,
+          ndcgAt5: 0,
+          meanLatencyMs: 0,
+          lexicalFaithfulnessPct: 0,
+        })),
+        sampleCases: [],
+      };
+    }
+
+    // Select representative chunks spread across documents and extract salient rare terms for ground-truth queries
+    const stride = Math.max(1, Math.floor(N / maxQueries));
+    const probeCases: {
+      targetDocId: string;
+      targetDocTitle: string;
+      targetChunkIdx: number;
+      query: string;
+      keyTerms: string[];
+    }[] = [];
+
+    for (let i = 0; i < N && probeCases.length < maxQueries; i += stride) {
+      const rec = this.store.vectors[i];
+      const tokens = Array.from(new Set(tokenizeTechnical(rec.content))).filter((t) => t.length >= 3);
+      if (tokens.length === 0) continue;
+
+      // Score terms by inverse document frequency (prefer specific technical terms in that chunk)
+      const rankedTerms = tokens
+        .map((tok) => {
+          const df = this.bm25Inverted.get(tok)?.df || 1;
+          const idf = Math.log(1 + N / df);
+          return { tok, score: idf + (tok.length > 6 ? 0.35 : 0) };
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map((x) => x.tok);
+
+      if (rankedTerms.length > 0) {
+        probeCases.push({
+          targetDocId: rec.docId,
+          targetDocTitle: rec.docTitle,
+          targetChunkIdx: rec.chunkIndex,
+          query: rankedTerms.slice(0, 4).join(' '),
+          keyTerms: rankedTerms,
+        });
+      }
+    }
+
+    const modesToEval: RagSearchMode[] = denseAvailable ? ['hybrid', 'dense', 'bm25'] : ['hybrid', 'bm25'];
+    const modeMetricsMap = new Map<RagSearchMode, RagBenchmarkModeMetrics>();
+    const rankLookup = new Map<string, number | null>();
+    const hybridScoreLookup = new Map<string, { score: number; matched: string[] }>();
+
+    for (const mode of modesToEval) {
+      let hit1 = 0;
+      let hit3 = 0;
+      let hit5 = 0;
+      let rrSum = 0;
+      let ndcgSum = 0;
+      let latSum = 0;
+      let faithSum = 0;
+
+      for (let cIdx = 0; cIdx < probeCases.length; cIdx++) {
+        const probe = probeCases[cIdx];
+        const res = await this.hybridSearch(ai, probe.query, { topK: 5, mode, alpha });
+        latSum += res.latencyMs.totalMs;
+
+        const matchIdx = res.results.findIndex(
+          (r) => r.docId === probe.targetDocId && r.chunkIndex === probe.targetChunkIdx
+        );
+        const rank = matchIdx >= 0 ? matchIdx + 1 : null;
+        rankLookup.set(`${mode}:${cIdx}`, rank);
+
+        if (mode === 'hybrid') {
+          hybridScoreLookup.set(String(cIdx), {
+            score: res.results[0]?.score ?? 0,
+            matched: res.results[0]?.matchedTerms || [],
+          });
+        }
+
+        if (rank !== null) {
+          if (rank <= 1) hit1 += 1;
+          if (rank <= 3) hit3 += 1;
+          if (rank <= 5) hit5 += 1;
+          rrSum += 1 / rank;
+          // Single-relevant-doc DCG@5 = 1 / log2(rank + 1) (IDCG = 1)
+          ndcgSum += 1 / Math.log2(rank + 1);
+        }
+
+        // Context lexical faithfulness: fraction of query keyTerms grounded in Top-3 retrieved snippets
+        const top3Text = res.results
+          .slice(0, 3)
+          .map((r) => r.snippet.toLowerCase())
+          .join(' ');
+        const covered = probe.keyTerms.filter((t) => top3Text.includes(t.toLowerCase())).length;
+        faithSum += probe.keyTerms.length > 0 ? covered / probe.keyTerms.length : 0;
+      }
+
+      const qCount = Math.max(1, probeCases.length);
+      modeMetricsMap.set(mode, {
+        mode,
+        queriesEvaluated: probeCases.length,
+        recallAt1Pct: Number(((hit1 / qCount) * 100).toFixed(1)),
+        recallAt3Pct: Number(((hit3 / qCount) * 100).toFixed(1)),
+        recallAt5Pct: Number(((hit5 / qCount) * 100).toFixed(1)),
+        mrr: Number((rrSum / qCount).toFixed(3)),
+        ndcgAt5: Number((ndcgSum / qCount).toFixed(3)),
+        meanLatencyMs: Number((latSum / qCount).toFixed(2)),
+        lexicalFaithfulnessPct: Number(((faithSum / qCount) * 100).toFixed(1)),
+      });
+    }
+
+    if (!denseAvailable) {
+      modeMetricsMap.set('dense', {
+        mode: 'dense',
+        queriesEvaluated: 0,
+        recallAt1Pct: 0,
+        recallAt3Pct: 0,
+        recallAt5Pct: 0,
+        mrr: 0,
+        ndcgAt5: 0,
+        meanLatencyMs: 0,
+        lexicalFaithfulnessPct: 0,
+      });
+    }
+
+    const orderedMetrics = (['hybrid', 'dense', 'bm25'] as RagSearchMode[]).map((m) => modeMetricsMap.get(m)!);
+    const hybridMrr = modeMetricsMap.get('hybrid')?.mrr || 0;
+    const bm25Mrr = modeMetricsMap.get('bm25')?.mrr || 0;
+    const hybridLiftOverBm25Pct =
+      bm25Mrr > 0 ? Number((((hybridMrr - bm25Mrr) / bm25Mrr) * 100).toFixed(1)) : 0;
+
+    const sampleCases: RagBenchmarkCaseResult[] = probeCases.map((p, cIdx) => {
+      const hybMeta = hybridScoreLookup.get(String(cIdx));
+      return {
+        query: p.query,
+        expectedDocTitle: p.targetDocTitle,
+        expectedChunkIndex: p.targetChunkIdx,
+        hybridRank: rankLookup.get(`hybrid:${cIdx}`) ?? null,
+        bm25Rank: rankLookup.get(`bm25:${cIdx}`) ?? null,
+        denseRank: denseAvailable ? rankLookup.get(`dense:${cIdx}`) ?? null : null,
+        hybridTopScore: hybMeta?.score ?? 0,
+        matchedKeyTerms: hybMeta?.matched || p.keyTerms.slice(0, 4),
+      };
+    });
+
+    return {
+      evaluatedAt: new Date().toLocaleTimeString(),
+      totalIndexedChunks: N,
+      totalIndexedDocs: this.store.documents.length,
+      queryCount: probeCases.length,
+      denseAvailable,
+      hybridLiftOverBm25Pct,
+      modeMetrics: orderedMetrics,
+      sampleCases,
+    };
   }
 }
 

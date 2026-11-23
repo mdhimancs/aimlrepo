@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -9,11 +9,13 @@ import {
   FileCheck2,
   Gauge,
   Layers,
+  Play,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   XCircle
 } from 'lucide-react';
-import { RagStatusResponse } from '../types';
+import { RagBenchmarkResponse, RagStatusResponse } from '../types';
 
 interface RepoRagAuditDashboardProps {
   ragStatus: RagStatusResponse | null;
@@ -26,6 +28,28 @@ export default function RepoRagAuditDashboard({
   onDeleteDoc,
   onSwitchToIngest
 }: RepoRagAuditDashboardProps) {
+  const [benchmark, setBenchmark] = useState<RagBenchmarkResponse | null>(null);
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
+
+  const handleRunRagBenchmark = async () => {
+    setIsBenchmarking(true);
+    setBenchmarkError(null);
+    try {
+      const res = await fetch('/api/rag/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxQueries: 6, alpha: 0.55 })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to evaluate retrieval quality');
+      setBenchmark(data as RagBenchmarkResponse);
+    } catch (err: any) {
+      setBenchmarkError(err.message || 'Benchmark execution failed.');
+    } finally {
+      setIsBenchmarking(false);
+    }
+  };
   const docs = ragStatus?.documents || [];
   const auditSummary = ragStatus?.auditSummary || {
     avgQualityScore: 0,
@@ -302,8 +326,8 @@ export default function RepoRagAuditDashboard({
                             </div>
                           </td>
 
-                          <td className="py-3 px-3 font-mono min-w-[140px]">
-                            <div className="flex items-center justify-between text-[11px] font-bold">
+                          <td className="py-3 px-3 font-mono tabular-nums min-w-[155px]">
+                            <div className="flex items-center justify-between text-xs font-bold">
                               <span
                                 className={
                                   (q?.overallScore || 0) >= 85
@@ -315,9 +339,9 @@ export default function RepoRagAuditDashboard({
                               >
                                 {q?.overallScore || 0}/100
                               </span>
-                              <span className="text-[10px] text-slate-600">{q?.verdict}</span>
+                              <span className="text-[11px] text-slate-600 font-sans font-semibold">{q?.verdict}</span>
                             </div>
-                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mt-1">
+                            <div className="w-full h-2.5 bg-slate-200 border border-slate-300 rounded-full overflow-hidden mt-1.5">
                               <div
                                 className={`h-full rounded-full ${
                                   (q?.overallScore || 0) >= 85
@@ -329,7 +353,7 @@ export default function RepoRagAuditDashboard({
                                 style={{ width: `${q?.overallScore || 0}%` }}
                               />
                             </div>
-                            <div className="text-[10px] text-slate-500 mt-1">
+                            <div className="text-[11px] text-slate-500 mt-1">
                               {q?.uniqueTerms || 0} BM25 terms
                             </div>
                           </td>
@@ -370,22 +394,26 @@ export default function RepoRagAuditDashboard({
           {/* Bottom Split: Token Distribution Bar Chart + Chronological Audit Trail */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* Token Usage Breakdown Bar Chart */}
-            <div className="lg:col-span-6 bg-white border border-slate-300 rounded-xl p-4 space-y-3 shadow-2xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+            <div className="lg:col-span-6 bg-white border border-slate-300 rounded-xl p-5 space-y-3.5 shadow-2xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                <span className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Layers className="w-4 h-4 text-blue-900" />
                   <span>Token Allocation: Unique Source vs Overlap Overhead</span>
                 </span>
-                <div className="flex items-center gap-3 text-[10px] font-mono">
-                  <span className="text-blue-900 font-semibold">■ Source Tokens</span>
-                  <span className="text-amber-700 font-semibold">■ Overlap Tokens</span>
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span className="inline-flex items-center gap-1.5 text-blue-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-blue-700 inline-block" /> Source
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-amber-800 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-xs bg-amber-500 inline-block" /> Overlap
+                  </span>
                 </div>
               </div>
 
               {docs.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-500">No indexed documents to chart yet.</div>
               ) : (
-                <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-3.5 max-h-64 overflow-y-auto pr-1">
                   {docs.map((doc) => {
                     const src = doc.tokenStats?.sourceTokens || 0;
                     const ov = doc.tokenStats?.overlapTokens || 0;
@@ -393,9 +421,9 @@ export default function RepoRagAuditDashboard({
                     const srcW = (src / maxDocTokens) * 100;
                     const ovW = (ov / maxDocTokens) * 100;
                     return (
-                      <div key={doc.id} className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px] font-mono">
-                          <span className="font-semibold text-slate-800 truncate max-w-[230px]" title={doc.title}>
+                      <div key={doc.id} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-mono tabular-nums">
+                          <span className="font-sans font-semibold text-slate-800 truncate max-w-[230px]" title={doc.title}>
                             {doc.title}
                           </span>
                           <span className="text-slate-600 shrink-0">
@@ -403,9 +431,9 @@ export default function RepoRagAuditDashboard({
                             <strong className="text-blue-900">{total.toLocaleString()}</strong> tok
                           </span>
                         </div>
-                        <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200 flex">
+                        <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden border border-slate-300 flex">
                           <div
-                            className="h-full bg-blue-800"
+                            className="h-full bg-blue-700"
                             style={{ width: `${Math.min(100, srcW)}%` }}
                             title={`Source Tokens: ${src}`}
                           />
@@ -473,6 +501,107 @@ export default function RepoRagAuditDashboard({
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Retrieval Effectiveness Benchmark Harness (Recall@1/@3/@5, MRR, NDCG@5, Faithfulness) */}
+          <div className="bg-white border border-slate-300 rounded-xl overflow-hidden shadow-2xs">
+            <div className="px-4 py-3 bg-slate-100 border-b border-slate-300 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-slate-900">
+                  Retrieval Effectiveness Benchmark (Recall@K · MRR · NDCG@5 · Faithfulness)
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  Evaluates Hybrid RRF vs Dense Vector vs BM25 Sparse across indexed chunks using inverse-document-frequency technical probe queries.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRunRagBenchmark}
+                disabled={isBenchmarking || (ragStatus?.totalVectors || 0) === 0}
+                className="px-3.5 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 disabled:bg-slate-300 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+              >
+                {isBenchmarking ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Running Benchmark...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Run Retrieval Benchmark</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {benchmarkError && (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-900">
+                  {benchmarkError}
+                </div>
+              )}
+
+              {!benchmark ? (
+                <div className="text-xs text-slate-600 py-3">
+                  Click <strong>Run Retrieval Benchmark</strong> to measure empirical Recall@1, Recall@3, Recall@5, MRR, NDCG@5, and Context Lexical Faithfulness across your ingested corpus.
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-600">
+                    <span>
+                      Evaluated <strong className="text-slate-900">{benchmark.queryCount}</strong> chunk-grounded queries across{' '}
+                      <strong className="text-slate-900">{benchmark.totalIndexedChunks}</strong> chunks ({benchmark.evaluatedAt})
+                    </span>
+                    <span className="font-bold text-indigo-800">
+                      Hybrid MRR Lift vs BM25: {benchmark.hybridLiftOverBm25Pct >= 0 ? '+' : ''}
+                      {benchmark.hybridLiftOverBm25Pct}%
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 font-mono text-[11px] text-slate-700">
+                          <th className="py-2 px-3">Retrieval Mode</th>
+                          <th className="py-2 px-3 text-right">Recall@1</th>
+                          <th className="py-2 px-3 text-right">Recall@3</th>
+                          <th className="py-2 px-3 text-right">Recall@5</th>
+                          <th className="py-2 px-3 text-right">MRR</th>
+                          <th className="py-2 px-3 text-right">NDCG@5</th>
+                          <th className="py-2 px-3 text-right">Faithfulness</th>
+                          <th className="py-2 px-3 text-right">Avg Lat</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
+                        {benchmark.modeMetrics.map((m) => (
+                          <tr key={m.mode} className={m.mode === 'hybrid' ? 'bg-indigo-50/50' : ''}>
+                            <td className="py-2 px-3 font-bold text-slate-900 uppercase">
+                              {m.mode}
+                              {m.mode === 'dense' && !benchmark.denseAvailable && (
+                                <span className="ml-2 text-[10px] font-normal text-slate-500 normal-case">
+                                  (No Dense Key)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right">{m.queriesEvaluated > 0 ? `${m.recallAt1Pct}%` : '—'}</td>
+                            <td className="py-2 px-3 text-right">{m.queriesEvaluated > 0 ? `${m.recallAt3Pct}%` : '—'}</td>
+                            <td className="py-2 px-3 text-right font-bold text-emerald-800">
+                              {m.queriesEvaluated > 0 ? `${m.recallAt5Pct}%` : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right font-bold text-indigo-900">
+                              {m.queriesEvaluated > 0 ? m.mrr : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right">{m.queriesEvaluated > 0 ? m.ndcgAt5 : '—'}</td>
+                            <td className="py-2 px-3 text-right">{m.queriesEvaluated > 0 ? `${m.lexicalFaithfulnessPct}%` : '—'}</td>
+                            <td className="py-2 px-3 text-right text-slate-600">{m.queriesEvaluated > 0 ? `${m.meanLatencyMs}ms` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>

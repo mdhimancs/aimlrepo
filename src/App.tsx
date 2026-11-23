@@ -46,7 +46,8 @@ import {
   ChevronDown,
   Star,
   GraduationCap,
-  Download
+  Download,
+  ArrowUp
 } from 'lucide-react';
 import { ProjectBlueprint, FlagshipProject, RagCitation, RagStatusResponse, SyntheticDataType, SyntheticVariant } from './types';
 import WhitePaperBlogTab from './components/WhitePaperBlogTab';
@@ -59,8 +60,8 @@ import ProjectSyntheticDatasetPanel from './components/ProjectSyntheticDatasetPa
 import GoogleScholarWhitePaper from './components/GoogleScholarWhitePaper';
 import ProjectEconomicsPanel from './components/ProjectEconomicsPanel';
 import MLTrainingSimulatorTab, { SimConfigState, TrainingLogEntry } from './components/MLTrainingSimulatorTab';
-import { downloadProjectGitZip } from './utils/gitRepoBuilder';
-import { computeProjectEconomics, formatInrCompact } from './utils/projectEconomics';
+import { buildColabPercentScript, downloadProjectGitZip, downloadProjectNotebook } from './utils/gitRepoBuilder';
+import { computeProjectEconomics, formatRsOnly, formatUsdOnly } from './utils/projectEconomics';
 import {
   ENCRYPTION_MECHANISM_META,
   LEARNING_RATE_PRESETS,
@@ -69,9 +70,11 @@ import {
   SYNTHETIC_DATA_TYPE_META,
   SYNTHETIC_VARIANT_META,
   computeLatencyP95P99,
+  computeScale1B5Metrics,
   inferBestLearningRate,
   inferBestMlTechnique,
   inferBestProgrammingArch,
+  inferOptimalEpochs,
   inferProjectDataType
 } from './utils/syntheticDataset';
 import { EXTERNAL_URL_PROJECTS } from './data/importedProjects';
@@ -255,7 +258,7 @@ class EquivariantGNNBlock(nn.Module):
       methodology: 'Spatial graph construction is accelerated using Rust k-d trees, reducing CPU preprocessing bottlenecks by 85% for large macromolecular complexes.',
       architecture: 'Distributed Rust preprocessing workers feeding PyTorch Geometric GPU training pipelines.',
       benchmarks: 'Tested on CASP14 target sequences. Achieved average GDT score of 91.2 and backbone RMSD of 1.24 Å with 1,400 residues/sec throughput.',
-      productionConsiderations: 'High-throughput HPC cluster execution with MPI parallelization for screening virtual chemical libraries valued at over ₹83,500 Cr.'
+      productionConsiderations: 'High-throughput HPC cluster execution with MPI parallelization for screening virtual chemical libraries valued at over $10.0 B / Rs 83,500 Cr.'
     }
   },
   {
@@ -1646,6 +1649,7 @@ const DATACAMP_REPOSITORY_PROJECTS: FlagshipProject[] = [
 ];
 
 const ALL_REPOSITORY_PROJECTS: FlagshipProject[] = [
+  ...FLAGSHIP_PROJECTS,
   ...UIDAI_DPI_PROJECTS,
   ...CYBERSECURITY_RESEARCH_PROJECTS,
   ...RESEARCH_GRADE_PROJECTS,
@@ -1700,7 +1704,7 @@ export default function App() {
   }, [starredRepoIds]);
 
   const starredRepoProjects = ALL_REPOSITORY_PROJECTS.filter(p => starredRepoIds.includes(p.id));
-  const researchProjects: FlagshipProject[] = [...FLAGSHIP_PROJECTS, ...starredRepoProjects];
+  const researchProjects: FlagshipProject[] = starredRepoProjects;
   const nonStarredRepoProjects = ALL_REPOSITORY_PROJECTS.filter(p => !starredRepoIds.includes(p.id));
 
   useEffect(() => {
@@ -1708,12 +1712,37 @@ export default function App() {
       setArchivesOpen(true);
     }
   }, [activeTab]);
-  const [selectedProject, setSelectedProject] = useState<FlagshipProject | null>(FLAGSHIP_PROJECTS[0]);
+  const [selectedProject, setSelectedProject] = useState<FlagshipProject | null>(() => starredRepoProjects[0] || null);
   const [repoFilter, setRepoFilter] = useState<'All' | 'Beginner' | 'Intermediate' | 'Advanced' | 'Research Grade'>('All');
   const [repoSearch, setRepoSearch] = useState('');
   const [selectedRepoProject, setSelectedRepoProject] = useState<FlagshipProject | null>(ALL_REPOSITORY_PROJECTS[0]);
-  const [codeRepoTargetProjectId, setCodeRepoTargetProjectId] = useState<string>(FLAGSHIP_PROJECTS[0]?.id || '');
+  const [codeRepoTargetProjectId, setCodeRepoTargetProjectId] = useState<string>((starredRepoProjects[0] || ALL_REPOSITORY_PROJECTS[0])?.id || '');
   const [copiedCodeIndex, setCopiedCodeIndex] = useState<number | null>(null);
+  const repoSpecsRef = useRef<HTMLDivElement | null>(null);
+  const storyboardSpecsRef = useRef<HTMLDivElement | null>(null);
+
+  const handleViewRepoSpecs = (proj: FlagshipProject) => {
+    setSelectedRepoProject(proj);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        repoSpecsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 30);
+    });
+  };
+
+  const handleViewStoryboardSpecs = (proj: FlagshipProject) => {
+    setSelectedProject(proj);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        storyboardSpecsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 30);
+    });
+  };
+
+  const activeStoryboardProject =
+    selectedProject && starredRepoIds.includes(selectedProject.id)
+      ? selectedProject
+      : (researchProjects[0] || null);
 
   const toggleStarRepoProject = (projectId: string) => {
     const isCurrentlyStarred = starredRepoIds.includes(projectId);
@@ -1723,12 +1752,12 @@ export default function App() {
 
     setStarredRepoIds(nextStarredIds);
 
+    const nextResearchList = ALL_REPOSITORY_PROJECTS.filter(p => nextStarredIds.includes(p.id));
     if (isCurrentlyStarred && selectedProject?.id === projectId) {
-      const nextResearchList = [
-        ...FLAGSHIP_PROJECTS,
-        ...ALL_REPOSITORY_PROJECTS.filter(p => nextStarredIds.includes(p.id))
-      ];
       setSelectedProject(nextResearchList[0] || null);
+    } else if (!isCurrentlyStarred && !selectedProject) {
+      const newlyStarred = ALL_REPOSITORY_PROJECTS.find(p => p.id === projectId) || nextResearchList[0] || null;
+      setSelectedProject(newlyStarred);
     }
   };
   
@@ -1750,7 +1779,7 @@ export default function App() {
   const [showBuilderWhitePaper, setShowBuilderWhitePaper] = useState(false);
 
   // ML Training Simulator State (1.50B Cohort + 20-Year Horizon + Architecture, ML & Encryption)
-  const allProjectsCatalog: FlagshipProject[] = [...FLAGSHIP_PROJECTS, ...ALL_REPOSITORY_PROJECTS];
+  const allProjectsCatalog: FlagshipProject[] = ALL_REPOSITORY_PROJECTS;
   const [simConfig, setSimConfig] = useState<SimConfigState>({
     projectId: FLAGSHIP_PROJECTS[0].id,
     dataType: inferProjectDataType(FLAGSHIP_PROJECTS[0]),
@@ -1760,8 +1789,8 @@ export default function App() {
     horizonYears: 20,
     seed: 42,
     learningRate: inferBestLearningRate(FLAGSHIP_PROJECTS[0]).lrValue,
-    batchSize: '32',
-    epochs: 12,
+    batchSize: '64',
+    epochs: inferOptimalEpochs(FLAGSHIP_PROJECTS[0]),
     optimizer: 'AdamW',
     architecture: FLAGSHIP_PROJECTS[0].techStack.slice(0, 2).join(' + '),
     programmingArch: inferBestProgrammingArch(FLAGSHIP_PROJECTS[0]),
@@ -1831,25 +1860,7 @@ export default function App() {
   };
 
   const handleCopyAllPipeline = (project: FlagshipProject) => {
-    const fullCode = `# =====================================================================
-# RESEARCH SPECIFICATION & PRODUCTION REPOSITORY PIPELINE
-# PROJECT: ${project.title}
-# DOMAIN: ${project.domain} | DIFFICULTY: ${project.difficulty}
-# PERFORMANCE METRICS: ${project.metrics}
-# TRAINING CONVERGENCE: Loss: ${project.trainingLoss} | Acc: ${project.trainingAccuracy}
-# SOURCE REFERENCE: ${project.sourceName || 'DataCamp'} Machine Learning Research & Benchmark Catalog
-# SPEC: Google Scholar Benchmark Paper Format
-# =====================================================================
-
-` + project.pipeline.map((p, idx) => `
-# ---------------------------------------------------------------------
-# PIPELINE STEP 0${idx + 1}: ${p.title}
-# Objective: ${p.desc}
-# Runtime: ${p.language === 'rust' ? 'Rust (Cargo / PyO3)' : 'Python 3.10+ (PyTorch / Scikit-Learn)'}
-# ---------------------------------------------------------------------
-${p.code}
-`).join('\n\n');
-
+    const fullCode = buildColabPercentScript(project);
     navigator.clipboard.writeText(fullCode);
     setCopiedAllId(project.id);
     setTimeout(() => setCopiedAllId(null), 2500);
@@ -1922,94 +1933,85 @@ ${p.code}
     const progMeta = PROGRAMMING_ARCHITECTURE_META[cfg.programmingArch];
     const mlMeta = ML_TECHNIQUE_META[cfg.mlTechnique];
 
-    const batchMult = Math.max(0.85, Math.min(1.65, Number(cfg.batchSize) / 32));
+    const maxEpochs = Math.max(6, Number(cfg.epochs) || 18);
     const lrNum = Math.max(1e-5, Math.min(0.05, parseFloat(cfg.learningRate) || 0.0001));
     const matchedLrPreset = LEARNING_RATE_PRESETS.find(
-      (p) => Math.abs(p.numericLr - lrNum) < p.numericLr * 0.15
+      (p) => Math.abs(p.numericLr - lrNum) < p.numericLr * 0.2
     );
-    const lrFactor = matchedLrPreset ? matchedLrPreset.lossModifier : lrNum > 0.005 ? 1.14 : 1.0;
-    const lrAccBonus = matchedLrPreset ? matchedLrPreset.accBonus : lrNum > 0.005 ? -0.015 : 0;
     const lrSigmaMult = matchedLrPreset ? matchedLrPreset.sigmaMult : lrNum > 0.005 ? 1.35 : 1.0;
 
+    // Unified 1.50B-scale + 20-year horizon optimized convergence targets
+    const scaleTargets = computeScale1B5Metrics({
+      project: targetProj,
+      dataType: cfg.dataType,
+      variant: cfg.syntheticVariant,
+      progArch: cfg.programmingArch,
+      mlTech: cfg.mlTechnique,
+      encProfile: cfg.encryptionProfile,
+      learningRate: cfg.learningRate,
+      batchSize: cfg.batchSize,
+      epochs: maxEpochs,
+      optimizer: cfg.optimizer,
+      sampleCount: cfg.sampleCount,
+      annualDeltaPct: cfg.annualDeltaPct,
+      horizonYears: cfg.horizonYears
+    });
+
+    const startLoss = Math.max(
+      0.85,
+      (targetProj.epochHistory[0]?.loss || 1.45) *
+        varMeta.lossPenalty *
+        typeMeta.lossMult *
+        (isCrossModality ? 1.16 : 1.0)
+    );
+    const rawFirstAcc = targetProj.epochHistory[0]?.accuracy || 0.68;
+    const startAcc = Math.max(
+      0.48,
+      Math.min(0.86, (rawFirstAcc > 1 ? rawFirstAcc / 100 : rawFirstAcc) - (isCrossModality ? 0.05 : 0))
+    );
+
+    const latStats = computeLatencyP95P99(
+      cfg.programmingArch,
+      cfg.dataType,
+      cfg.mlTechnique,
+      cfg.encryptionProfile,
+      cfg.sampleCount
+    );
+
     let currentEpoch = 0;
-    const maxEpochs = Number(cfg.epochs) || 12;
-
-    let loss =
-      (targetProj.epochHistory[0]?.loss || 2.1) *
-      varMeta.lossPenalty *
-      typeMeta.lossMult *
-      mlMeta.lossModifier *
-      lrFactor *
-      (isCrossModality ? 1.18 : 1.0);
-    let acc = Math.max(
-      0.34,
-      (targetProj.epochHistory[0]?.accuracy || 0.5) +
-        varMeta.accOffset +
-        typeMeta.accBias +
-        mlMeta.accModifier +
-        lrAccBonus -
-        (isCrossModality ? 0.05 : 0)
-    );
-    let valLoss = loss * 1.11;
-    let valAcc = Math.max(0.3, acc - 0.035);
-
-    const targetFinalAcc = Math.min(
-      0.996,
-      Math.max(
-        0.75,
-        (targetProj.epochHistory[targetProj.epochHistory.length - 1]?.accuracy || 0.93) +
-          varMeta.accOffset +
-          typeMeta.accBias +
-          mlMeta.accModifier +
-          lrAccBonus -
-          (isCrossModality ? 0.03 : 0)
-      )
-    );
 
     const interval = window.setInterval(() => {
       currentEpoch += 1;
-      const decay = 0.71 + (isCrossModality ? 0.04 : 0);
-      loss = Math.max(
-        0.045,
-        loss * decay + Math.random() * 0.025 * varMeta.noiseMultiplier * lrSigmaMult
+      const t = currentEpoch / maxEpochs; // 0..1 progress along Cosine WSD schedule
+      const cosineDecay = 0.5 * (1 + Math.cos(Math.PI * t)); // 1 -> 0 smooth cosine
+      const fastDrop = Math.pow(1 - t, 1.85);
+      const blend = 0.55 * fastDrop + 0.45 * cosineDecay;
+      const noiseScale = (1 - t * 0.85) * 0.012 * varMeta.noiseMultiplier * lrSigmaMult;
+
+      const loss = Math.max(
+        scaleTargets.optimizedLoss,
+        scaleTargets.optimizedLoss + (startLoss - scaleTargets.optimizedLoss) * blend + Math.random() * noiseScale
       );
-      acc = Math.min(
-        targetFinalAcc,
-        acc + (targetFinalAcc - acc) * 0.38 + (Math.random() - 0.25) * 0.012
+      const accuracy = Math.min(
+        scaleTargets.optimizedTrainAcc,
+        startAcc + (scaleTargets.optimizedTrainAcc - startAcc) * (1 - blend) - Math.random() * 0.002
       );
-      valLoss = Math.max(
-        loss * 1.04,
-        valLoss * (decay + 0.02) + Math.random() * 0.035 * varMeta.noiseMultiplier * lrSigmaMult
-      );
-      const gap = Math.max(
-        0.005,
-        0.011 * varMeta.noiseMultiplier + (isCrossModality ? 0.011 : 0)
-      );
-      valAcc = Math.min(
-        targetFinalAcc - gap,
-        acc - gap + (Math.random() - 0.5) * 0.008
+      const valLoss = Math.max(loss * 1.03, loss * 1.06 + Math.random() * noiseScale * 0.7);
+      const gap = Math.max(0.002, (scaleTargets.generalizationGapPct / 100) * (0.75 + 0.5 * (1 - t)));
+      const valAcc = Math.min(
+        scaleTargets.optimizedValAcc,
+        Math.max(0.42, accuracy - gap + (Math.random() - 0.5) * 0.0018 * (1 - t * 0.7))
       );
 
       const sigma = Number(
-        (varMeta.sigmaBase * lrSigmaMult * (0.7 + 0.5 * (1 - currentEpoch / maxEpochs))).toFixed(2)
+        (varMeta.sigmaBase * lrSigmaMult * (0.45 + 0.55 * (1 - t))).toFixed(2)
       );
-      const encMeta = ENCRYPTION_MECHANISM_META[cfg.encryptionProfile];
       const throughput = Math.round(
-        typeMeta.throughputBase *
-          progMeta.throughputMultiplier *
-          encMeta.throughputMultiplier *
-          batchMult *
-          (0.95 + Math.random() * 0.1)
+        scaleTargets.optimizedThroughput * (0.96 + Math.random() * 0.07)
       );
-      const latStats = computeLatencyP95P99(
-        cfg.programmingArch,
-        cfg.dataType,
-        cfg.mlTechnique,
-        cfg.encryptionProfile
-      );
-      const jitterRand = 0.94 + Math.random() * 0.1;
+      const jitterRand = 0.96 + Math.random() * 0.06;
       const latencyMs = Number((latStats.p95Ms * jitterRand).toFixed(2));
-      const p99LatencyMs = Number((latStats.p99Ms * (0.95 + Math.random() * 0.14)).toFixed(2));
+      const p99LatencyMs = Number((latStats.p99Ms * (0.97 + Math.random() * 0.08)).toFixed(2));
 
       setTrainingEpoch(currentEpoch);
       setTrainingLogs((prev) => [
@@ -2017,7 +2019,7 @@ ${p.code}
         {
           epoch: currentEpoch,
           loss: Number(loss.toFixed(4)),
-          accuracy: Number(acc.toFixed(4)),
+          accuracy: Number(accuracy.toFixed(4)),
           valLoss: Number(valLoss.toFixed(4)),
           valAcc: Number(valAcc.toFixed(4)),
           sigma,
@@ -2035,7 +2037,7 @@ ${p.code}
         trainingIntervalRef.current = null;
         setIsTraining(false);
       }
-    }, 320);
+    }, 240);
 
     trainingIntervalRef.current = interval;
   };
@@ -2045,6 +2047,7 @@ ${p.code}
     dataType: SyntheticDataType,
     variant: SyntheticVariant
   ) => {
+    const autoMlTech = inferBestMlTechnique(project);
     const nextConfig: SimConfigState = {
       ...simConfig,
       projectId: project.id,
@@ -2052,8 +2055,10 @@ ${p.code}
       dataType,
       syntheticVariant: variant,
       sampleCount: variant === 'scaled_100k' ? 2410000000 : 1500000000,
+      batchSize: '64',
+      epochs: inferOptimalEpochs(project, dataType, autoMlTech, simConfig.annualDeltaPct),
       programmingArch: inferBestProgrammingArch(project),
-      mlTechnique: inferBestMlTechnique(project),
+      mlTechnique: autoMlTech,
       learningRate: inferBestLearningRate(project).lrValue
     };
     setSimConfig(nextConfig);
@@ -2282,23 +2287,25 @@ ${p.code}
               </>
             )}
             <span className="text-xs font-bold text-slate-900 capitalize">
-              {activeTab === 'builder'
-                ? 'Project Builder Wizard'
-                : activeTab === 'copilot'
-                  ? 'AI ML Copilot'
-                  : activeTab === 'roadmap'
-                    ? 'MLOps Roadmap'
-                    : activeTab === 'coderepo'
-                      ? 'Code Repo'
-                      : activeTab === 'training'
-                        ? 'ML Simulator'
-                        : activeTab === 'whitepapers'
-                          ? 'White Papers'
-                          : activeTab === 'learning'
-                            ? 'Learning'
-                            : activeTab === 'archives'
-                              ? 'Archives'
-                              : activeTab.replace('-', ' ')}
+              {activeTab === 'showcase'
+                ? 'Storyboard'
+                : activeTab === 'repository'
+                  ? 'ML Case Studies'
+                  : activeTab === 'builder'
+                    ? 'Project Builder Wizard'
+                    : activeTab === 'copilot'
+                      ? 'AI ML Copilot'
+                      : activeTab === 'roadmap'
+                        ? 'MLOps Roadmap'
+                        : activeTab === 'coderepo'
+                          ? 'Code Repo'
+                          : activeTab === 'training'
+                            ? 'ML Simulator'
+                            : activeTab === 'whitepapers'
+                              ? 'White Papers'
+                              : activeTab === 'learning'
+                                ? 'Learning'
+                                : 'Archives'}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -2315,29 +2322,26 @@ ${p.code}
             <div className="space-y-6 mb-10">
               <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-50 via-white to-slate-50 border border-slate-200 p-6 md:p-8 w-full shadow-sm">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="max-w-4xl">
-                    <div className="flex items-center gap-2 text-xs font-mono text-indigo-700 font-semibold mb-2">
-                      <span>Production AI, Cybersecurity &amp; UIDAI DPI Research Engine</span>
-                    </div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2 tracking-tight">
-                      AI/ML Research &amp; Cases studies
+                <div className="relative z-10 flex flex-col gap-4">
+                  <div className="space-y-2 max-w-4xl">
+                    <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
+                      AI/ML Research &amp; Cases Studies
                     </h1>
                     <p className="text-slate-600 text-base leading-relaxed">
                       Production-ready reference implementations featuring Training Convergence Charts, Sample Data Distributions, Architecture Topologies, and Rust-accelerated pipelines.
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <button 
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <button
                       onClick={() => setActiveTab('builder')}
-                      className="px-4 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors flex items-center gap-1.5 text-xs shadow-md shadow-indigo-600/20"
+                      className="px-3.5 py-2 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors flex items-center gap-1.5 text-xs shadow-sm shadow-indigo-600/20 cursor-pointer"
                     >
                       <span>Start Custom Project</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTab('training')}
-                      className="px-4 py-2.5 bg-white text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-1.5 text-xs border border-slate-300 shadow-xs"
+                      className="px-3.5 py-2 bg-white text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-1.5 text-xs border border-slate-300 shadow-xs cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Training Sandbox</span>
@@ -2375,15 +2379,20 @@ ${p.code}
                       {(['All', 'Beginner', 'Intermediate', 'Advanced', 'Research Grade'] as const).map(lvl => (
                         <button
                           key={lvl}
-                          onClick={() => setRepoFilter(lvl)}
+                          onClick={() => {
+                            setRepoFilter(lvl);
+                            if (lvl === 'All') {
+                              setStarredOnlyFilter(false);
+                            }
+                          }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                            repoFilter === lvl 
+                            repoFilter === lvl && !(lvl === 'All' && starredOnlyFilter)
                               ? 'bg-blue-900 text-white shadow-xs' 
                               : 'bg-slate-200 hover:bg-slate-300 text-slate-800 border border-slate-300'
                           }`}
                         >
                           {lvl === 'All'
-                            ? `All Levels (${ALL_REPOSITORY_PROJECTS.length})`
+                            ? `All Projects (${ALL_REPOSITORY_PROJECTS.length})`
                             : `${lvl} (${ALL_REPOSITORY_PROJECTS.filter(p => p.difficulty === lvl).length})`}
                         </button>
                       ))}
@@ -2394,10 +2403,10 @@ ${p.code}
                             ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                             : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
                         }`}
-                        title="Filter projects starred into Research Projects"
+                        title="Filter projects starred & pinned to Storyboard"
                       >
                         <Star className={`w-3.5 h-3.5 ${starredOnlyFilter ? 'fill-white text-white' : 'fill-amber-400 text-amber-500'}`} />
-                        <span>Starred in Research ({starredRepoIds.length})</span>
+                        <span>Pinned to Storyboard ({starredRepoIds.length})</span>
                       </button>
                     </div>
 
@@ -2416,34 +2425,63 @@ ${p.code}
                 </div>
               </div>
 
-              {/* LangChain + FAISS RAG Document Ingestion Section */}
+              {/* LangChain + FAISS RAG Document Ingestion Section (Collapsed by default so all projects are immediately visible) */}
               <RepoRagIngestionPanel
                 ragStatus={ragStatus}
                 onRefreshStatus={fetchRagStatus}
                 onOpenCopilot={() => setActiveTab('copilot')}
               />
 
-              {/* Projects Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {ALL_REPOSITORY_PROJECTS
-                  .filter(proj => {
-                    const isStarred = starredRepoIds.includes(proj.id);
-                    if (!starredOnlyFilter && !isStarred) return false;
-                    const matchesLevel = repoFilter === 'All' || proj.difficulty === repoFilter;
-                    const matchesStarred = !starredOnlyFilter || isStarred;
-                    const matchesSearch = !repoSearch || 
-                      proj.title.toLowerCase().includes(repoSearch.toLowerCase()) ||
-                      proj.domain.toLowerCase().includes(repoSearch.toLowerCase()) ||
-                      (proj.sourceName || '').toLowerCase().includes(repoSearch.toLowerCase()) ||
-                      proj.techStack.some(t => t.toLowerCase().includes(repoSearch.toLowerCase()));
-                    return matchesLevel && matchesStarred && matchesSearch;
-                  })
-                  .map(proj => {
-                    const isStarred = starredRepoIds.includes(proj.id);
-                    return (
+              {/* Explicit Visible Catalog Counter + Reset Filters */}
+              {(() => {
+                const filteredRepoProjects = ALL_REPOSITORY_PROJECTS.filter(proj => {
+                  const matchesLevel = repoFilter === 'All' || proj.difficulty === repoFilter;
+                  const matchesStarred = !starredOnlyFilter || starredRepoIds.includes(proj.id);
+                  const q = repoSearch.trim().toLowerCase();
+                  const matchesSearch = !q || 
+                    proj.title.toLowerCase().includes(q) ||
+                    proj.domain.toLowerCase().includes(q) ||
+                    (proj.sourceName || '').toLowerCase().includes(q) ||
+                    proj.techStack.some(t => t.toLowerCase().includes(q));
+                  return matchesLevel && matchesStarred && matchesSearch;
+                });
+                const hasActiveFilter = repoFilter !== 'All' || starredOnlyFilter || repoSearch.trim().length > 0;
+
+                return (
+                  <div className="space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-300 rounded-xl px-4 py-3 shadow-2xs">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-bold text-slate-900">
+                          Showing {filteredRepoProjects.length} of {ALL_REPOSITORY_PROJECTS.length} ML &amp; AI Case Studies
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-600">
+                          Click the <strong className="text-amber-700">Star</strong> button on any project to pin it to <strong className="text-indigo-700">Storyboard</strong>
+                        </span>
+                      </div>
+                      {hasActiveFilter && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRepoFilter('All');
+                            setStarredOnlyFilter(false);
+                            setRepoSearch('');
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold transition-colors"
+                        >
+                          Show All {ALL_REPOSITORY_PROJECTS.length} Projects
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Projects Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      {filteredRepoProjects.map(proj => {
+                        const isStarred = starredRepoIds.includes(proj.id);
+                        return (
                     <div 
                       key={proj.id}
-                      onClick={() => setSelectedRepoProject(proj)}
+                      onClick={() => handleViewRepoSpecs(proj)}
                       className={`cursor-pointer rounded-2xl bg-slate-100 border border-slate-300 p-6 transition-all duration-200 hover:bg-slate-200 hover:shadow-lg flex flex-col justify-between ${
                         selectedRepoProject?.id === proj.id ? 'ring-2 ring-indigo-600/30 bg-slate-200 border-indigo-600' : ''
                       }`}
@@ -2469,8 +2507,8 @@ ${p.code}
                                 e.stopPropagation();
                                 toggleStarRepoProject(proj.id);
                               }}
-                              aria-label={isStarred ? `Remove ${proj.title} from Research Projects` : `Add ${proj.title} to Research Projects`}
-                              title={isStarred ? 'Starred in Research Projects (Click to remove)' : 'Star to add to Research Projects'}
+                              aria-label={isStarred ? `Unpin ${proj.title} from Storyboard` : `Star to pin ${proj.title} to Storyboard`}
+                              title={isStarred ? 'Pinned to Storyboard (Click to unstar)' : 'Star to pin to Storyboard'}
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-sans font-semibold transition-all ${
                                 isStarred
                                   ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
@@ -2478,7 +2516,7 @@ ${p.code}
                               }`}
                             >
                               <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-amber-400 text-amber-500' : 'text-slate-400'}`} />
-                              <span>{isStarred ? 'In Research' : 'Star'}</span>
+                              <span>{isStarred ? 'Pinned' : 'Star'}</span>
                             </button>
                           </div>
                         </div>
@@ -2506,15 +2544,18 @@ ${p.code}
                             <div className="grid grid-cols-3 gap-1.5 bg-white p-2 rounded-xl border border-slate-300 text-[11px] font-mono tabular-nums">
                               <div>
                                 <span className="text-slate-500 block text-[9.5px]">Total CapEx</span>
-                                <span className="text-blue-950 font-bold">{formatInrCompact(econ.totalCapExUsd)}</span>
+                                <span className="text-blue-950 font-bold block">{formatUsdOnly(econ.totalCapExUsd)}</span>
+                                <span className="text-slate-500 text-[9px] block">{formatRsOnly(econ.totalCapExUsd)}</span>
                               </div>
                               <div>
                                 <span className="text-slate-500 block text-[9.5px]">OpEx YoY (Y1)</span>
-                                <span className="text-emerald-900 font-bold">{formatInrCompact(econ.opExYear1Usd)}</span>
+                                <span className="text-emerald-900 font-bold block">{formatUsdOnly(econ.opExYear1Usd)}</span>
+                                <span className="text-slate-500 text-[9px] block">{formatRsOnly(econ.opExYear1Usd)}</span>
                               </div>
                               <div>
                                 <span className="text-slate-500 block text-[9.5px]">20-Yr OpEx</span>
-                                <span className="text-indigo-950 font-bold">{formatInrCompact(econ.totalOpEx20YrUsd)}</span>
+                                <span className="text-indigo-950 font-bold block">{formatUsdOnly(econ.totalOpEx20YrUsd)}</span>
+                                <span className="text-slate-500 text-[9px] block">{formatRsOnly(econ.totalOpEx20YrUsd)}</span>
                               </div>
                             </div>
                           );
@@ -2539,20 +2580,34 @@ ${p.code}
                             <BookOpen className="w-3.5 h-3.5" />
                             <span>White Paper</span>
                           </button>
-                          <span className="text-xs text-blue-900 font-medium flex items-center gap-1 hover:underline">
-                            <span>View Specs & Code</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewRepoSpecs(proj);
+                            }}
+                            className="px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <span>View Specs &amp; Code</span>
                             <ArrowRight className="w-3.5 h-3.5" />
-                          </span>
+                          </button>
                         </div>
                       </div>
                     </div>
                   );
                 })}
-              </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Selected Repository Project Detailed View */}
               {selectedRepoProject && (
-                <div className="rounded-2xl bg-slate-100 border border-slate-300 p-8 space-y-10 shadow-md">
+                <div
+                  id="repo-specs-panel"
+                  ref={repoSpecsRef}
+                  className="scroll-mt-24 rounded-2xl bg-slate-100 border border-slate-300 p-8 space-y-10 shadow-md"
+                >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-300">
                     <div>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 font-medium mb-1">
@@ -2563,6 +2618,14 @@ ${p.code}
                       <h2 className="text-2xl font-bold text-slate-900">{selectedRepoProject.title}</h2>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className="px-3 py-2 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                        <span>Back to Projects</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => toggleStarRepoProject(selectedRepoProject.id)}
@@ -2581,8 +2644,8 @@ ${p.code}
                         />
                         <span>
                           {starredRepoIds.includes(selectedRepoProject.id)
-                            ? 'Starred in Research Projects'
-                            : 'Star for Research Projects'}
+                            ? 'Pinned on Storyboard'
+                            : 'Star to Pin on Storyboard'}
                         </span>
                       </button>
                       <button 
@@ -2594,6 +2657,14 @@ ${p.code}
                       >
                         <FolderGit2 className="w-4 h-4 text-blue-900" />
                         <span>Code Repo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => downloadProjectNotebook(selectedRepoProject)}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        <span>Download .ipynb (Colab / Jupyter)</span>
                       </button>
                       <button 
                         onClick={async () => {
@@ -2682,135 +2753,172 @@ ${p.code}
             </div>
           )}
 
-          {/* TAB 1: RESEARCH PROJECTS SHOWCASE */}
+          {/* TAB 1: STORYBOARD (STARRED / PINNED PROJECTS ONLY) */}
           {activeTab === 'showcase' && (
             <div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-                {researchProjects.map(proj => {
-                  const isFromRepo = starredRepoIds.includes(proj.id);
-                  return (
-                  <div 
-                    key={proj.id}
-                    onClick={() => setSelectedProject(proj)}
-                    className={`cursor-pointer rounded-2xl bg-slate-100 border border-slate-300 p-6 transition-all duration-200 hover:bg-slate-200 hover:shadow-lg flex flex-col justify-between ${selectedProject?.id === proj.id ? 'ring-2 ring-indigo-600/30 bg-slate-200 border-indigo-600' : ''}`}
+              {researchProjects.length === 0 ? (
+                <div className="rounded-2xl bg-slate-100 border border-slate-300 p-12 text-center space-y-4 mb-12 shadow-xs">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto">
+                    <Star className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div className="space-y-1 max-w-md mx-auto">
+                    <h3 className="text-lg font-bold text-slate-900">No Starred Projects on Storyboard</h3>
+                    <p className="text-sm text-slate-600">
+                      Select the star icon on any project in ML Case Studies to pin it to your Storyboard.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('repository')}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs inline-flex items-center gap-2 transition-colors shadow-sm"
                   >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <span className="text-xs font-semibold text-blue-900 uppercase tracking-wider leading-snug">{proj.domain}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-xs px-2.5 py-0.5 rounded-md font-medium bg-emerald-100 text-emerald-900 border border-emerald-300">
-                            {proj.difficulty}
-                          </span>
-                          {isFromRepo && (
+                    <Database className="w-4 h-4" />
+                    <span>Browse ML Case Studies</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+                  {researchProjects.map(proj => (
+                    <div 
+                      key={proj.id}
+                      onClick={() => handleViewStoryboardSpecs(proj)}
+                      className={`cursor-pointer rounded-2xl bg-slate-100 border border-slate-300 p-6 transition-all duration-200 hover:bg-slate-200 hover:shadow-lg flex flex-col justify-between ${activeStoryboardProject?.id === proj.id ? 'ring-2 ring-indigo-600/30 bg-slate-200 border-indigo-600' : ''}`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <span className="text-xs font-semibold text-blue-900 uppercase tracking-wider leading-snug">{proj.domain}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-xs px-2.5 py-0.5 rounded-md font-medium bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              {proj.difficulty}
+                            </span>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleStarRepoProject(proj.id);
                               }}
-                              title="Remove from Research Projects"
+                              title="Unstar to remove from Storyboard"
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-sans font-semibold transition-colors"
                             >
                               <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
-                              <span>Starred</span>
+                              <span>Pinned</span>
                             </button>
-                          )}
-                        </div>
-                      </div>
-                      <h3 className="text-lg font-bold text-slate-900 mb-2 leading-snug">{proj.title}</h3>
-                      <p className="text-slate-700 text-sm mb-4 line-clamp-3 leading-relaxed">{proj.description}</p>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      {/* Training Loss & Accuracy Preview in Silver Grey Box */}
-                      <div className="grid grid-cols-2 gap-2 bg-slate-200/80 hover:bg-slate-300 p-2.5 rounded-xl border border-slate-300 text-xs font-mono transition-all duration-200">
-                        <div>
-                          <span className="text-slate-600 block text-[10px]">Train Loss</span>
-                          <span className="text-blue-900 font-semibold">{proj.trainingLoss.split(' ')[0]}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-600 block text-[10px]">Train Accuracy</span>
-                          <span className="text-emerald-900 font-semibold">{proj.trainingAccuracy.split(' ')[0]}</span>
-                        </div>
-                      </div>
-
-                      {/* CapEx & 20-Yr YoY OpEx Financial Preview */}
-                      {(() => {
-                        const econ = computeProjectEconomics(proj);
-                        return (
-                          <div className="grid grid-cols-3 gap-1.5 bg-white p-2 rounded-xl border border-slate-300 text-[11px] font-mono tabular-nums">
-                            <div>
-                              <span className="text-slate-500 block text-[9.5px]">Total CapEx</span>
-                              <span className="text-blue-950 font-bold">{formatInrCompact(econ.totalCapExUsd)}</span>
-                            </div>
-                            <div>
-                              <span className="text-slate-500 block text-[9.5px]">OpEx YoY (Y1)</span>
-                              <span className="text-emerald-900 font-bold">{formatInrCompact(econ.opExYear1Usd)}</span>
-                            </div>
-                            <div>
-                              <span className="text-slate-500 block text-[9.5px]">20-Yr OpEx</span>
-                              <span className="text-indigo-950 font-bold">{formatInrCompact(econ.totalOpEx20YrUsd)}</span>
-                            </div>
                           </div>
-                        );
-                      })()}
-
-                      <div className="flex flex-wrap gap-1.5">
-                        {proj.techStack.slice(0, 3).map((tech, i) => (
-                          <span key={i} className={`text-xs px-2 py-0.5 rounded font-mono ${tech === 'Rust' ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold' : 'bg-slate-200 text-slate-800 border border-slate-300'}`}>
-                            {tech}
-                          </span>
-                        ))}
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 mb-2 leading-snug">{proj.title}</h3>
+                        <p className="text-slate-700 text-sm mb-4 line-clamp-3 leading-relaxed">{proj.description}</p>
                       </div>
                       
-                      <div className="pt-3 border-t border-slate-300 flex items-center justify-between">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWhitePaperModalProject(proj);
-                          }}
-                          className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-indigo-300"
-                        >
-                          <BookOpen className="w-3.5 h-3.5" />
-                          <span>Technical White Paper</span>
-                        </button>
-                        <span className="text-xs text-blue-900 font-medium flex items-center gap-1 hover:underline">
-                          <span>View Specs</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </span>
+                      <div className="space-y-4">
+                        {/* Training Loss & Accuracy Preview in Silver Grey Box */}
+                        <div className="grid grid-cols-2 gap-2 bg-slate-200/80 hover:bg-slate-300 p-2.5 rounded-xl border border-slate-300 text-xs font-mono transition-all duration-200">
+                          <div>
+                            <span className="text-slate-600 block text-[10px]">Train Loss</span>
+                            <span className="text-blue-900 font-semibold">{proj.trainingLoss.split(' ')[0]}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-600 block text-[10px]">Train Accuracy</span>
+                            <span className="text-emerald-900 font-semibold">{proj.trainingAccuracy.split(' ')[0]}</span>
+                          </div>
+                        </div>
+
+                        {/* CapEx & 20-Yr YoY OpEx Financial Preview */}
+                        {(() => {
+                          const econ = computeProjectEconomics(proj);
+                          return (
+                            <div className="grid grid-cols-3 gap-1.5 bg-white p-2 rounded-xl border border-slate-300 text-[11px] font-mono tabular-nums">
+                              <div>
+                                <span className="text-slate-500 block text-[9.5px]">Total CapEx</span>
+                                <span className="text-blue-950 font-bold block">{formatUsdOnly(econ.totalCapExUsd)}</span>
+                                <span className="text-slate-500 text-[9px] block">{formatRsOnly(econ.totalCapExUsd)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[9.5px]">OpEx YoY (Y1)</span>
+                                <span className="text-emerald-900 font-bold block">{formatUsdOnly(econ.opExYear1Usd)}</span>
+                                <span className="text-slate-500 text-[9px] block">{formatRsOnly(econ.opExYear1Usd)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 block text-[9.5px]">20-Yr OpEx</span>
+                                <span className="text-indigo-950 font-bold block">{formatUsdOnly(econ.totalOpEx20YrUsd)}</span>
+                                <span className="text-slate-500 text-[9px] block">{formatRsOnly(econ.totalOpEx20YrUsd)}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {proj.techStack.slice(0, 3).map((tech, i) => (
+                            <span key={i} className={`text-xs px-2 py-0.5 rounded font-mono ${tech === 'Rust' ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold' : 'bg-slate-200 text-slate-800 border border-slate-300'}`}>
+                              {tech}
+                            </span>
+                          ))}
+                        </div>
+                        
+                        <div className="pt-3 border-t border-slate-300 flex items-center justify-between">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWhitePaperModalProject(proj);
+                            }}
+                            className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-indigo-300"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                            <span>Technical White Paper</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewStoryboardSpecs(proj);
+                            }}
+                            className="px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <span>View Specs</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {/* Selected Project Detailed View: Training Convergence Chart, Sample Distribution, Problem, Breaking Ground, Architecture, & Code */}
-              {selectedProject && (
-                <div className="rounded-2xl bg-slate-100 border border-slate-300 p-8 space-y-10 shadow-md">
+              {activeStoryboardProject && (
+                <div
+                  id="storyboard-specs-panel"
+                  ref={storyboardSpecsRef}
+                  className="scroll-mt-24 rounded-2xl bg-slate-100 border border-slate-300 p-8 space-y-10 shadow-md"
+                >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-300">
                     <div>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 font-medium mb-1">
-                        <span className="font-semibold text-slate-900">{selectedProject.domain}</span>
+                        <span className="font-semibold text-slate-900">{activeStoryboardProject.domain}</span>
                         <span>·</span>
-                        <span className="text-blue-900 font-bold">{selectedProject.metrics}</span>
+                        <span className="text-blue-900 font-bold">{activeStoryboardProject.metrics}</span>
                       </div>
-                      <h2 className="text-2xl font-bold text-slate-900">{selectedProject.title}</h2>
+                      <h2 className="text-2xl font-bold text-slate-900">{activeStoryboardProject.title}</h2>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
-                      {starredRepoIds.includes(selectedProject.id) && (
-                        <button
-                          type="button"
-                          onClick={() => toggleStarRepoProject(selectedProject.id)}
-                          className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs"
-                        >
-                          <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
-                          <span>Remove Star</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className="px-3 py-2 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                        <span>Back to Projects</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleStarRepoProject(activeStoryboardProject.id)}
+                        className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs"
+                      >
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
+                        <span>Unpin / Remove Star</span>
+                      </button>
                       <button 
                         onClick={() => {
-                          setCodeRepoTargetProjectId(selectedProject.id);
+                          setCodeRepoTargetProjectId(activeStoryboardProject.id);
                           setActiveTab('coderepo');
                         }}
                         className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs"
@@ -2818,9 +2926,17 @@ ${p.code}
                         <FolderGit2 className="w-4 h-4 text-blue-900" />
                         <span>Code Repo</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => downloadProjectNotebook(activeStoryboardProject)}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        <span>Download .ipynb (Colab / Jupyter)</span>
+                      </button>
                       <button 
                         onClick={async () => {
-                          await downloadProjectGitZip(selectedProject);
+                          await downloadProjectGitZip(activeStoryboardProject);
                         }}
                         className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
                       >
@@ -2828,7 +2944,7 @@ ${p.code}
                         <span>Download Git Repo (.zip)</span>
                       </button>
                       <button 
-                        onClick={() => setWhitePaperModalProject(selectedProject)}
+                        onClick={() => setWhitePaperModalProject(activeStoryboardProject)}
                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-md"
                       >
                         <BookOpen className="w-4 h-4" />
@@ -2844,7 +2960,7 @@ ${p.code}
                         <AlertCircle className="w-4 h-4" />
                         <span>Problem Statement (Google Scholar Spec)</span>
                       </div>
-                      <p className="text-slate-800 text-sm leading-relaxed">{selectedProject.problem}</p>
+                      <p className="text-slate-800 text-sm leading-relaxed">{activeStoryboardProject.problem}</p>
                     </div>
 
                     <div className="bg-slate-100 hover:bg-slate-200 p-6 rounded-xl border border-slate-300 space-y-3 transition-all duration-200 shadow-xs">
@@ -2852,19 +2968,19 @@ ${p.code}
                         <Lightbulb className="w-4 h-4" />
                         <span>Breaking Ground & Innovation</span>
                       </div>
-                      <p className="text-slate-800 text-sm leading-relaxed">{selectedProject.breakingGround}</p>
+                      <p className="text-slate-800 text-sm leading-relaxed">{activeStoryboardProject.breakingGround}</p>
                     </div>
                   </div>
 
                   {/* TRAINING LOSS, ACCURACY, DEVIATION, EFFICIENCY & MODEL COMPARISON GRAPHS */}
-                  <ProjectTelemetryCharts project={selectedProject} />
+                  <ProjectTelemetryCharts project={activeStoryboardProject} />
 
                   {/* TOTAL CAPEX, 20-YEAR YOY OPEX & OPERATIONAL COST ARCHITECTURE */}
-                  <ProjectEconomicsPanel project={selectedProject} />
+                  <ProjectEconomicsPanel project={activeStoryboardProject} />
 
                   {/* SYNTHETIC DATASET & SELECTED DATA TYPE TRAINING LAUNCHER */}
                   <ProjectSyntheticDatasetPanel
-                    project={selectedProject}
+                    project={activeStoryboardProject}
                     onRunTrainingWithDataType={handleLaunchTrainingFromProject}
                   />
 
@@ -2875,13 +2991,13 @@ ${p.code}
                       <span>System Architecture & Data Flow Topology (Google Scholar Spec)</span>
                     </h3>
                     <div className="flex flex-wrap items-center gap-3">
-                      {selectedProject.architectureFlow.map((node, i) => (
+                      {activeStoryboardProject.architectureFlow.map((node, i) => (
                         <React.Fragment key={i}>
                           <div className="px-3.5 py-2 rounded-lg bg-white border border-slate-300 text-blue-950 text-xs font-mono font-semibold shadow-xs">
                             <span className="text-blue-900 font-bold mr-1.5">0{i+1}.</span>
                             {node}
                           </div>
-                          {i < selectedProject.architectureFlow.length - 1 && (
+                          {i < activeStoryboardProject.architectureFlow.length - 1 && (
                             <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
                           )}
                         </React.Fragment>
@@ -2891,8 +3007,8 @@ ${p.code}
 
                   {/* Annotated Pipeline Steps & Code */}
                   <AnnotatedCodePipeline
-                    project={selectedProject}
-                    bannerTitle="Flagship Research & Production Pipeline (Annotated)"
+                    project={activeStoryboardProject}
+                    bannerTitle="Starred Research & Production Pipeline (Annotated)"
                     bannerSubtitle="Annotated production scripts with header documentation, line-block descriptions, distributed training convergence loops, and Rust-accelerated kernels."
                     copiedCodeIndex={copiedCodeIndex}
                     copiedAllId={copiedAllId}
@@ -3591,9 +3707,9 @@ ${p.code}
                   { label: 'Calibrated Class B', percentage: 48, count: '48,000' }
                 ],
                 performanceIndicators: {
-                  latency: '< 18.2 ms',
-                  throughput: '95 req/s',
-                  memoryFootprint: '< 5.1 GB VRAM',
+                  latency: 'P95 2.4ms / P99 4.1ms',
+                  throughput: '142,000 req/s (16-Shard Cluster)',
+                  memoryFootprint: '4.15 GB VRAM / shard (FP8 + PQ-8)',
                   hardwareTarget: builderForm.deploymentTarget
                 },
                 techStack: generatedBlueprint.recommendedStack && generatedBlueprint.recommendedStack.length > 0 

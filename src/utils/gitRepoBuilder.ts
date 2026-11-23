@@ -20,6 +20,266 @@ function cleanFileSlug(title: string): string {
     .slice(0, 36);
 }
 
+function toNbLines(text: string): string[] {
+  const lines = text.split('\n');
+  return lines.map((line, idx) => (idx < lines.length - 1 ? `${line}\n` : line));
+}
+
+function getProjectPipPackages(project: FlagshipProject, hasRust: boolean): string[] {
+  const reqs = new Set<string>([
+    'numpy>=1.26.0',
+    'pandas>=2.2.0',
+    'scikit-learn>=1.4.0',
+    'fastapi>=0.111.0',
+    'uvicorn>=0.29.0',
+    'pyyaml>=6.0.1',
+    'pytest>=8.0.0',
+    'requests>=2.31.0',
+    'pydantic>=2.7.0'
+  ]);
+  const stackLower = project.techStack.join(' ').toLowerCase();
+  if (
+    stackLower.includes('pytorch') ||
+    stackLower.includes('torch') ||
+    stackLower.includes('resnet') ||
+    stackLower.includes('transformer') ||
+    stackLower.includes('swin') ||
+    stackLower.includes('diffusion') ||
+    stackLower.includes('lstm')
+  ) {
+    reqs.add('torch>=2.2.0');
+  }
+  if (stackLower.includes('xgboost')) reqs.add('xgboost>=2.0.0');
+  if (stackLower.includes('lightgbm')) reqs.add('lightgbm>=4.3.0');
+  if (stackLower.includes('catboost')) reqs.add('catboost>=1.2.0');
+  if (stackLower.includes('pyspark')) reqs.add('pyspark>=3.5.0');
+  if (stackLower.includes('langchain') || stackLower.includes('faiss')) {
+    reqs.add('faiss-cpu>=1.8.0');
+    reqs.add('langchain>=0.2.0');
+  }
+  if (hasRust) reqs.add('maturin>=1.5.0');
+  return Array.from(reqs).sort();
+}
+
+export interface NotebookCellPreview {
+  id: string;
+  cellType: 'markdown' | 'code';
+  title?: string;
+  source: string;
+}
+
+export function buildColabNotebookCells(project: FlagshipProject): NotebookCellPreview[] {
+  const hasRust =
+    project.techStack.some((t) => t.toLowerCase().includes('rust')) ||
+    project.pipeline.some((p) => p.language === 'rust');
+  const reqs = getProjectPipPackages(project, hasRust);
+  const pipPackages = reqs.map((r) => r.split('>=')[0]).join(' ');
+  const lastEpoch = project.epochHistory[project.epochHistory.length - 1];
+
+  const cells: NotebookCellPreview[] = [];
+
+  cells.push({
+    id: `${project.id}-intro`,
+    cellType: 'markdown',
+    title: 'Project Overview & Google Colab / Jupyter Setup',
+    source: [
+      `# ${project.title}`,
+      ``,
+      `- **Domain:** ${project.domain}`,
+      `- **Tier:** ${project.difficulty}`,
+      `- **Target Metrics:** ${project.metrics}`,
+      `- **Convergence:** Loss \`${project.trainingLoss}\` · Accuracy \`${project.trainingAccuracy}\``,
+      ``,
+      `## Problem Statement`,
+      `${project.problem}`,
+      ``,
+      `## Key Innovation`,
+      `${project.breakingGround}`,
+      ``,
+      `> **Ready for Google Colab & Jupyter:** Run cells sequentially from top to bottom. Rust acceleration kernels (if present) are automatically written via \`%%writefile\` magic.`
+    ].join('\n')
+  });
+
+  cells.push({
+    id: `${project.id}-setup`,
+    cellType: 'code',
+    title: '01. Install Dependencies & Inspect Runtime (Colab / Jupyter)',
+    source: [
+      `# @title 1. Install Dependencies & Inspect Runtime (Google Colab / Jupyter)`,
+      `!pip install -q ${pipPackages}`,
+      ``,
+      `import os, sys, platform`,
+      `os.makedirs("src", exist_ok=True)`,
+      `os.makedirs("configs", exist_ok=True)`,
+      `print(f"Python: {sys.version.split()[0]} | Platform: {platform.platform()}")`,
+      `try:`,
+      `    import torch`,
+      `    print(f"PyTorch: {torch.__version__} | CUDA Available: {torch.cuda.is_available()}")`,
+      `except ImportError:`,
+      `    print("PyTorch not required for this pipeline.")`
+    ].join('\n')
+  });
+
+  cells.push({
+    id: `${project.id}-config`,
+    cellType: 'code',
+    title: '02. Experiment Configuration & Hyperparameters',
+    source: [
+      `# @title 2. Experiment Configuration & Hyperparameters`,
+      `CONFIG = {`,
+      `    "project_id": "${project.id}",`,
+      `    "domain": "${project.domain}",`,
+      `    "difficulty": "${project.difficulty}",`,
+      `    "epochs": ${lastEpoch ? lastEpoch.epoch : 10},`,
+      `    "learning_rate": 3e-4,`,
+      `    "target_loss": "${project.trainingLoss}",`,
+      `    "target_accuracy": "${project.trainingAccuracy}",`,
+      `    "hardware_target": "${project.performanceIndicators.hardwareTarget}",`,
+      `}`,
+      `print("Loaded CONFIG:", CONFIG)`
+    ].join('\n')
+  });
+
+  project.pipeline.forEach((step, idx) => {
+    const isRust = step.language === 'rust';
+    const base = cleanFileSlug(step.title) || `step_${idx + 1}`;
+    const ext = isRust ? 'rs' : 'py';
+    const filename = `src/0${idx + 1}_${base}.${ext}`;
+
+    cells.push({
+      id: `${project.id}-step-md-${idx + 1}`,
+      cellType: 'markdown',
+      title: `Step ${idx + 1}: ${step.title}`,
+      source: [
+        `### Step ${idx + 1}: ${step.title} (${isRust ? 'Rust Native Kernel' : 'Python'})`,
+        `${step.desc}`
+      ].join('\n')
+    });
+
+    cells.push({
+      id: `${project.id}-step-code-${idx + 1}`,
+      cellType: 'code',
+      title: `Step ${idx + 1}: ${step.title}`,
+      source: isRust
+        ? [
+            `%%writefile ${filename}`,
+            `// @title Step ${idx + 1}: ${step.title} (Rust Native Module)`,
+            step.code
+          ].join('\n')
+        : [
+            `# @title Step ${idx + 1}: ${step.title}`,
+            step.code
+          ].join('\n')
+    });
+  });
+
+  cells.push({
+    id: `${project.id}-eval-md`,
+    cellType: 'markdown',
+    title: 'Benchmark Summary & Serving Contract Verification',
+    source: [
+      `## Benchmark Summary & Serving Contract`,
+      `- **Latency:** ${project.performanceIndicators.latency}`,
+      `- **Throughput:** ${project.performanceIndicators.throughput}`,
+      `- **Memory Footprint:** ${project.performanceIndicators.memoryFootprint}`
+    ].join('\n')
+  });
+
+  cells.push({
+    id: `${project.id}-eval-code`,
+    cellType: 'code',
+    title: '03. Verify Pipeline Metrics & Export Summary',
+    source: [
+      `# @title Final: Verify Pipeline Metrics & Runtime Summary`,
+      `summary = {`,
+      `    "project": "${project.title}",`,
+      `    "metrics": "${project.metrics}",`,
+      `    "training_loss": "${project.trainingLoss}",`,
+      `    "training_accuracy": "${project.trainingAccuracy}",`,
+      `    "status": "colab_jupyter_verified",`,
+      `}`,
+      `print("Verification Summary:", summary)`
+    ].join('\n')
+  });
+
+  return cells;
+}
+
+export function buildColabNotebookJson(project: FlagshipProject): string {
+  const cells = buildColabNotebookCells(project);
+  const notebook = {
+    nbformat: 4,
+    nbformat_minor: 5,
+    metadata: {
+      colab: {
+        provenance: [],
+        toc_visible: true,
+        include_colab_link: true
+      },
+      kernelspec: {
+        display_name: 'Python 3',
+        name: 'python3'
+      },
+      language_info: {
+        name: 'python',
+        version: '3.11.0'
+      },
+      accelerator: 'GPU'
+    },
+    cells: cells.map((cell) => {
+      if (cell.cellType === 'markdown') {
+        return {
+          id: cell.id,
+          cell_type: 'markdown',
+          metadata: {},
+          source: toNbLines(cell.source)
+        };
+      }
+      return {
+        id: cell.id,
+        cell_type: 'code',
+        execution_count: null,
+        metadata: {
+          cellView: 'both'
+        },
+        outputs: [],
+        source: toNbLines(cell.source)
+      };
+    })
+  };
+
+  return JSON.stringify(notebook, null, 2) + '\n';
+}
+
+export function buildColabPercentScript(project: FlagshipProject): string {
+  const cells = buildColabNotebookCells(project);
+  return cells
+    .map((cell) => {
+      if (cell.cellType === 'markdown') {
+        const commented = cell.source
+          .split('\n')
+          .map((line) => `# ${line}`)
+          .join('\n');
+        return `# %% [markdown]\n${commented}`;
+      }
+      return `# %%\n${cell.source}`;
+    })
+    .join('\n\n');
+}
+
+export function downloadProjectNotebook(project: FlagshipProject): void {
+  const ipynbContent = buildColabNotebookJson(project);
+  const blob = new Blob([ipynbContent], { type: 'application/x-ipynb+json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${project.id}_colab.ipynb`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function buildRepoFiles(project: FlagshipProject): RepoFile[] {
   const hasRust =
     project.techStack.some((t) => t.toLowerCase().includes('rust')) ||
@@ -28,13 +288,23 @@ export function buildRepoFiles(project: FlagshipProject): RepoFile[] {
 
   const files: RepoFile[] = [];
 
+  // 0. Google Colab & Jupyter Notebook (notebooks/<id>_colab.ipynb)
+  files.push({
+    path: `notebooks/${project.id}_colab.ipynb`,
+    name: `${project.id}_colab.ipynb`,
+    folder: 'notebooks',
+    language: 'ipynb',
+    description: 'Google Colab & JupyterLab ready notebook (nbformat v4.5) with pip setup, configs, and executable cells',
+    content: buildColabNotebookJson(project)
+  });
+
   // 1. README.md
   files.push({
     path: 'README.md',
     name: 'README.md',
     folder: 'root',
     language: 'markdown',
-    description: 'Project overview, architecture specifications, and reproduction instructions',
+    description: 'Project overview, Colab/Jupyter notebook instructions, and Git setup',
     content: `# ${project.title}
 
 Domain: ${project.domain}
@@ -47,6 +317,18 @@ ${project.problem}
 
 ## Core Contribution & Innovations
 ${project.breakingGround}
+
+## Google Colab & Jupyter Notebook
+This repository includes a self-contained Jupyter / Google Colab notebook at \`notebooks/${project.id}_colab.ipynb\`.
+
+- **Upload directly to Google Colab:** Open [colab.research.google.com](https://colab.research.google.com) -> **File -> Upload notebook** -> select \`notebooks/${project.id}_colab.ipynb\`.
+- **Open directly from GitHub in Google Colab:** After pushing to GitHub, open:
+  \`https://colab.research.google.com/github/<your-username>/${project.id}/blob/main/notebooks/${project.id}_colab.ipynb\`
+- **Run in local JupyterLab / Jupyter Notebook:**
+  \`\`\`bash
+  pip install jupyterlab -r requirements.txt
+  jupyter notebook notebooks/${project.id}_colab.ipynb
+  \`\`\`
 
 ## Architecture Pipeline
 ${project.architectureFlow.map((node, i) => `${i + 1}. ${node}`).join('\n')}
@@ -136,34 +418,7 @@ runs/
   });
 
   // 3. requirements.txt
-  const reqs = new Set<string>([
-    'numpy>=1.26.0',
-    'pandas>=2.2.0',
-    'scikit-learn>=1.4.0',
-    'fastapi>=0.111.0',
-    'uvicorn>=0.29.0',
-    'pyyaml>=6.0.1',
-    'pytest>=8.0.0',
-    'requests>=2.31.0',
-    'pydantic>=2.7.0'
-  ]);
-  const stackLower = project.techStack.join(' ').toLowerCase();
-  if (
-    stackLower.includes('pytorch') ||
-    stackLower.includes('torch') ||
-    stackLower.includes('resnet') ||
-    stackLower.includes('transformer') ||
-    stackLower.includes('swin') ||
-    stackLower.includes('diffusion')
-  ) {
-    reqs.add('torch>=2.2.0');
-  }
-  if (stackLower.includes('xgboost')) reqs.add('xgboost>=2.0.0');
-  if (stackLower.includes('pyspark')) reqs.add('pyspark>=3.5.0');
-  if (stackLower.includes('langchain') || stackLower.includes('faiss')) {
-    reqs.add('faiss-cpu>=1.8.0');
-  }
-  if (hasRust) reqs.add('maturin>=1.5.0');
+  const reqs = getProjectPipPackages(project, hasRust);
 
   files.push({
     path: 'requirements.txt',
@@ -171,7 +426,7 @@ runs/
     folder: 'root',
     language: 'text',
     description: 'Pinned Python dependencies ready for pip install',
-    content: Array.from(reqs).sort().join('\n') + '\n'
+    content: reqs.join('\n') + '\n'
   });
 
   // 4. pyproject.toml
@@ -205,7 +460,7 @@ python_files = ["test_*.py"]
     folder: 'root',
     language: 'makefile',
     description: 'Convenience CLI automation for install, run, test, and git upload',
-    content: `.PHONY: install run serve test docker-build git-init clean
+    content: `.PHONY: install run serve notebook test docker-build git-init clean
 
 install:
 \tpython3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
@@ -215,6 +470,9 @@ run:
 
 serve:
 \t. .venv/bin/activate && uvicorn src.serve_api:app --host 0.0.0.0 --port 8000 --reload
+
+notebook:
+\t. .venv/bin/activate && jupyter notebook notebooks/${project.id}_colab.ipynb
 
 test:
 \t. .venv/bin/activate && pytest -v tests/

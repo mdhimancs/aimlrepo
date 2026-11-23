@@ -44,18 +44,18 @@ function createTextSprite(
   bgColor: string,
   borderColor: string,
   maxAnisotropy: number,
-  scaleX = 1.65,
-  scaleY = 0.44
+  scaleX = 1.9,
+  scaleY = 0.5
 ) {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 136;
+  canvas.width = 640;
+  canvas.height = 160;
   const ctx = canvas.getContext('2d');
   if (ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Crisp pill container with clear padding
-    const r = 24;
+    // Crisp badge container with high-DPI padding
+    const r = 26;
     const w = canvas.width - 16;
     const h = canvas.height - 16;
     const x = 8;
@@ -74,11 +74,11 @@ function createTextSprite(
 
     ctx.fillStyle = bgColor;
     ctx.fill();
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 5;
     ctx.strokeStyle = borderColor;
     ctx.stroke();
 
-    ctx.font = 'bold 34px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.font = '700 44px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = textColor;
@@ -106,7 +106,7 @@ export default function ThreeDResearchManifold({
   dataType = 'multimodal',
   epochPoints,
   initialMode = 'loss_surface',
-  heightClass = 'h-[420px]'
+  heightClass = 'h-[470px]'
 }: ThreeDResearchManifoldProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<ThreeDGraphMode>(initialMode);
@@ -308,23 +308,23 @@ export default function ThreeDResearchManifold({
       disposables.push(coneGeo, coneMatX, coneMatY, coneMatZ);
 
       // Axis endpoint title sprites placed clearly outside data bounds
-      addLabel(xAxisTitle, [ox + xLen + 0.85, oy + 0.32, oz], '#9f1239', '#fff1f2', '#fda4af', 2.25, 0.5);
-      addLabel(yAxisTitle, [ox, oy + yLen + 0.65, oz], '#065f46', '#ecfdf5', '#6ee7b7', 2.25, 0.5);
-      addLabel(zAxisTitle, [ox, oy + 0.32, oz + zLen + 0.85], '#1e3a8a', '#eff6ff', '#93c5fd', 2.25, 0.5);
-      addLabel('(0, 0, 0)', [ox - 0.55, oy + 0.25, oz - 0.55], '#334155', '#f8fafc', '#94a3b8', 1.5, 0.4);
+      addLabel(xAxisTitle, [ox + xLen + 0.9, oy + 0.36, oz], '#9f1239', '#fff1f2', '#fda4af', 2.6, 0.58);
+      addLabel(yAxisTitle, [ox, oy + yLen + 0.72, oz], '#065f46', '#ecfdf5', '#6ee7b7', 2.6, 0.58);
+      addLabel(zAxisTitle, [ox, oy + 0.36, oz + zLen + 0.9], '#1e3a8a', '#eff6ff', '#93c5fd', 2.6, 0.58);
+      addLabel('(0, 0, 0)', [ox - 0.6, oy + 0.28, oz - 0.6], '#334155', '#f8fafc', '#94a3b8', 1.75, 0.46);
 
       // Spaced coordinate tick sprites along the front/left outer rims (well clear of geometry)
       xTicks.forEach((lbl, idx) => {
         const px = -4.2 + idx * (8.4 / Math.max(1, xTicks.length - 1));
-        addLabel(lbl, [px, oy + 0.22, 5.45], '#475569', 'rgba(255,255,255,0.92)', '#cbd5e1', 1.1, 0.36);
+        addLabel(lbl, [px, oy + 0.24, 5.45], '#334155', 'rgba(255,255,255,0.95)', '#cbd5e1', 1.32, 0.42);
       });
       yTicks.forEach((lbl, idx) => {
         const py = 0.9 + idx * 1.15;
-        addLabel(lbl, [ox - 0.72, py, oz], '#065f46', 'rgba(255,255,255,0.92)', '#a7f3d0', 1.1, 0.36);
+        addLabel(lbl, [ox - 0.78, py, oz], '#065f46', 'rgba(255,255,255,0.95)', '#6ee7b7', 1.32, 0.42);
       });
       zTicks.forEach((lbl, idx) => {
         const pz = -4.2 + idx * (8.4 / Math.max(1, zTicks.length - 1));
-        addLabel(lbl, [-5.45, oy + 0.22, pz], '#1e40af', 'rgba(255,255,255,0.92)', '#bfdbfe', 1.1, 0.36);
+        addLabel(lbl, [-5.45, oy + 0.24, pz], '#1e3a8a', 'rgba(255,255,255,0.95)', '#93c5fd', 1.32, 0.42);
       });
     };
 
@@ -741,23 +741,23 @@ export default function ThreeDResearchManifold({
         <div ref={mountRef} className="w-full h-full" />
 
         {/* Top-Left Spec Header (Compact, solid background, zero overlap with center manifold) */}
-        <div className="pointer-events-none absolute top-3 left-3 bg-white/95 border border-slate-300 rounded-xl px-3 py-1.5 shadow-xs max-w-sm">
-          <div className="flex items-center gap-1.5 text-[10.5px] font-mono text-indigo-800 font-bold">
+        <div className="pointer-events-none absolute top-3 left-3 bg-white/95 border border-slate-300 rounded-xl px-3.5 py-2 shadow-xs max-w-sm">
+          <div className="flex items-center gap-1.5 text-xs font-mono text-indigo-800 font-bold">
             <Box className="w-3.5 h-3.5" />
             <span>Interactive 3D WebGL Manifold (XYZ)</span>
           </div>
-          <div className="text-xs font-bold text-slate-900 truncate mt-0.5">{project.title}</div>
-          <div className="text-[10px] font-mono text-slate-600 truncate">
+          <div className="text-sm font-bold text-slate-900 truncate mt-0.5">{project.title}</div>
+          <div className="text-xs font-mono text-slate-700 truncate">
             {activeTechName} · {activeTypeName}
           </div>
         </div>
 
         {/* Top-Right Compact XYZ Axis Key */}
-        <div className="pointer-events-none hidden sm:flex absolute top-3 right-3 bg-white/95 border border-slate-300 rounded-xl px-3 py-1.5 shadow-xs items-center gap-2 text-[10px] font-mono text-slate-700">
+        <div className="pointer-events-none hidden sm:flex absolute top-3 right-3 bg-white/95 border border-slate-300 rounded-xl px-3.5 py-2 shadow-xs items-center gap-2.5 text-xs font-mono text-slate-800">
           <span className="font-bold text-rose-800">X</span>
           <span className="font-bold text-emerald-800">Y</span>
           <span className="font-bold text-blue-800">Z</span>
-          <span className="text-slate-600">{axisSummary}</span>
+          <span className="text-slate-700 font-medium">{axisSummary}</span>
         </div>
 
         {/* Collapsible Unified Bottom Control Dock */}

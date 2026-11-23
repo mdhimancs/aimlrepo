@@ -294,6 +294,40 @@ export interface RagIngestResponse {
   };
 }
 
+export interface RagBenchmarkModeMetrics {
+  mode: RagSearchMode;
+  queriesEvaluated: number;
+  recallAt1Pct: number;
+  recallAt3Pct: number;
+  recallAt5Pct: number;
+  mrr: number;
+  ndcgAt5: number;
+  meanLatencyMs: number;
+  lexicalFaithfulnessPct: number;
+}
+
+export interface RagBenchmarkCaseResult {
+  query: string;
+  expectedDocTitle: string;
+  expectedChunkIndex: number;
+  hybridRank: number | null;
+  bm25Rank: number | null;
+  denseRank: number | null;
+  hybridTopScore: number;
+  matchedKeyTerms: string[];
+}
+
+export interface RagBenchmarkResponse {
+  evaluatedAt: string;
+  totalIndexedChunks: number;
+  totalIndexedDocs: number;
+  queryCount: number;
+  denseAvailable: boolean;
+  hybridLiftOverBm25Pct: number;
+  modeMetrics: RagBenchmarkModeMetrics[];
+  sampleCases: RagBenchmarkCaseResult[];
+}
+
 export type SyntheticDataType =
   | 'tabular'
   | 'vision'

@@ -18,34 +18,58 @@ function hashProjectId(id: string): number {
   return (hash >>> 0) / 4294967295;
 }
 
-export function formatInrCompact(amountUsd: number): string {
-  const inr = amountUsd * USD_TO_INR;
-  const abs = Math.abs(inr);
+export function formatUsdOnly(amountUsd: number): string {
+  const sign = amountUsd < 0 ? '-' : '';
+  const abs = Math.abs(amountUsd);
   if (abs >= 1_000_000_000) {
-    const b = inr / 1_000_000_000;
-    return `₹${Number(b.toFixed(2))}B`;
+    const b = abs / 1_000_000_000;
+    return `${sign}$${Number(b.toFixed(b >= 10 ? 1 : 2))} B`;
   }
-  if (abs >= 10_000_000) {
-    const cr = inr / 10_000_000;
-    return `₹${Number(cr.toFixed(2))} Cr`;
-  }
-  if (abs >= 100_000) {
-    const l = inr / 100_000;
-    return `₹${Number(l.toFixed(2))} L`;
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    return `${sign}$${Number(m.toFixed(m >= 10 ? 1 : 2))} M`;
   }
   if (abs >= 1_000) {
-    const k = inr / 1_000;
-    return `₹${Number(k.toFixed(1))}K`;
+    const k = abs / 1_000;
+    return `${sign}$${Number(k.toFixed(1))} K`;
   }
-  return `₹${Math.round(inr)}`;
+  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`;
+}
+
+export function formatRsOnly(amountUsd: number): string {
+  const inr = amountUsd * USD_TO_INR;
+  const sign = inr < 0 ? '-' : '';
+  const abs = Math.abs(inr);
+  if (abs >= 10_000_000) {
+    const cr = abs / 10_000_000;
+    const formattedCr = cr >= 100 ? Math.round(cr).toLocaleString('en-US') : Number(cr.toFixed(1)).toString();
+    return `${sign}Rs ${formattedCr} Cr`;
+  }
+  if (abs >= 100_000) {
+    const l = abs / 100_000;
+    return `${sign}Rs ${Number(l.toFixed(1))} L`;
+  }
+  if (abs >= 1_000) {
+    const k = abs / 1_000;
+    return `${sign}Rs ${Number(k.toFixed(1))} K`;
+  }
+  return `${sign}Rs ${Math.round(abs).toLocaleString('en-US')}`;
+}
+
+export function formatDualCurrency(amountUsd: number): string {
+  return `${formatUsdOnly(amountUsd)} / ${formatRsOnly(amountUsd)}`;
+}
+
+export function formatInrCompact(amountUsd: number): string {
+  return formatDualCurrency(amountUsd);
 }
 
 export function formatInrExact(amountUsd: number): string {
-  return formatInrCompact(amountUsd);
+  return formatDualCurrency(amountUsd);
 }
 
-export const formatUsdCompact = formatInrCompact;
-export const formatUsdExact = formatInrExact;
+export const formatUsdCompact = formatUsdOnly;
+export const formatUsdExact = formatDualCurrency;
 
 export function computeProjectEconomics(project: FlagshipProject): ProjectEconomics {
   if (project.economics) {
@@ -75,7 +99,7 @@ export function computeProjectEconomics(project: FlagshipProject): ProjectEconom
   let basePowerKw = 1.8;
   let fteHeadcount = 1.5;
   let yoyCohortGrowth = 0.018;
-  let unitCostSummary = '₹0.015 / 1K predictions (CPU serverless / edge)';
+  let unitCostSummary = '$0.0002 / 1K predictions (Rs 0.015 · CPU serverless / edge)';
 
   if (isWorldScale) {
     deploymentTier = 'Sovereign / World-Scale (1.50B–2.41B)';
@@ -84,7 +108,7 @@ export function computeProjectEconomics(project: FlagshipProject): ProjectEconom
     basePowerKw = 1850 + Math.round(h1 * 950);
     fteHeadcount = 26 + Math.round(h2 * 16);
     yoyCohortGrowth = 0.024; // 1.50B -> 2.41B 20-year delta
-    unitCostSummary = '₹0.12 – ₹0.35 / 1,000 authenticated transactions (1.50B–2.41B scale)';
+    unitCostSummary = '$0.0014 – $0.0042 / 1K auth tx (Rs 0.12 – Rs 0.35 · 1.50B–2.41B scale)';
   } else if (project.difficulty === 'Research Grade') {
     deploymentTier = 'Enterprise / Research Cluster';
     const heavyAccelMult = /h100|a100|cluster|fpga/.test(textBlob) ? 1.55 : 0.92;
@@ -94,8 +118,8 @@ export function computeProjectEconomics(project: FlagshipProject): ProjectEconom
     fteHeadcount = 5 + Math.round(h2 * 6);
     yoyCohortGrowth = 0.026;
     unitCostSummary = isGpuCluster
-      ? '₹1.58 / 1K accelerated tensor inferences (bare-metal GPU)'
-      : '₹0.35 / 1K deterministic inferences';
+      ? '$0.019 / 1K accelerated tensor inferences (Rs 1.58 · bare-metal GPU)'
+      : '$0.0042 / 1K deterministic inferences (Rs 0.35)';
   } else if (project.difficulty === 'Advanced' || project.difficulty === 'Intermediate') {
     deploymentTier = 'Production Multi-Node';
     const gpuMult = /t4|l4|gpu|yolo|xray/.test(textBlob) ? 1.38 : 0.85;
@@ -104,7 +128,7 @@ export function computeProjectEconomics(project: FlagshipProject): ProjectEconom
     basePowerKw = Math.round((6.5 + h1 * 9.5) * gpuMult * 10) / 10;
     fteHeadcount = 2 + Math.round(h2 * 2);
     yoyCohortGrowth = 0.021;
-    unitCostSummary = '₹0.24 / 1K production API inferences';
+    unitCostSummary = '$0.0029 / 1K production API inferences (Rs 0.24)';
   } else {
     deploymentTier = 'Lean Edge / Serverless';
     baseCapEx = Math.round(14_500 + h1 * 19_500);
@@ -112,7 +136,7 @@ export function computeProjectEconomics(project: FlagshipProject): ProjectEconom
     basePowerKw = Math.round((1.2 + h1 * 1.9) * 10) / 10;
     fteHeadcount = 1;
     yoyCohortGrowth = 0.016;
-    unitCostSummary = '₹0.012 / 1K CPU microservice inferences';
+    unitCostSummary = '$0.00014 / 1K CPU microservice inferences (Rs 0.012)';
   }
 
   // Open-source Rust / Zero-copy runtime efficiency saves ~12% Infra & MLOps license bloat
