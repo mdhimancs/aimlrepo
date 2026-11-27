@@ -585,119 +585,120 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
           </div>
         </div>
 
-        {/* Sample Data Distribution Breakdown */}
-        <div className="lg:col-span-5 bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
-          <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
-            <PieChart className="w-4 h-4 text-blue-900" />
-            <span>Sample Training Data Distribution</span>
-          </div>
-          <p className="text-slate-700 text-xs leading-relaxed">
-            Class frequency, split balance, and sample volume breakdown across the training &amp; validation corpus.
-          </p>
+        {/* Right Column: Sample Data Distribution Breakdown + Run-Cycle Performance & Efficiency */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Sample Data Distribution Breakdown */}
+          <div className="bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
+            <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
+              <PieChart className="w-4 h-4 text-blue-900" />
+              <span>Sample Training Data Distribution</span>
+            </div>
+            <p className="text-slate-700 text-xs leading-relaxed">
+              Class frequency, split balance, and sample volume breakdown across the training &amp; validation corpus.
+            </p>
 
-          <div className="space-y-3.5 pt-1 bg-white p-4 rounded-xl border border-slate-300">
-            {project.sampleDistribution.map((dist, idx) => {
-              const distColors = [
-                'from-blue-600 to-indigo-700',
-                'from-emerald-600 to-teal-700',
-                'from-indigo-600 to-violet-700',
-                'from-amber-500 to-orange-600',
-                'from-rose-600 to-rose-800'
-              ];
-              return (
+            <div className="space-y-3.5 pt-1 bg-white p-4 rounded-xl border border-slate-300">
+              {project.sampleDistribution.map((dist, idx) => {
+                const distColors = [
+                  'from-blue-600 to-indigo-700',
+                  'from-emerald-600 to-teal-700',
+                  'from-indigo-600 to-violet-700',
+                  'from-amber-500 to-orange-600',
+                  'from-rose-600 to-rose-800'
+                ];
+                return (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex justify-between text-[13px] font-semibold">
+                      <span className="text-slate-800">{dist.label}</span>
+                      <span className="text-slate-900 font-mono font-bold tabular-nums">
+                        {dist.percentage}% <span className="text-slate-500 font-normal">({dist.count})</span>
+                      </span>
+                    </div>
+                    <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-300">
+                      <div
+                        className={`h-full bg-gradient-to-r ${distColors[idx % distColors.length]} rounded-full transition-all duration-300`}
+                        style={{ width: `${dist.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 grid grid-cols-2 gap-3 text-xs font-mono tabular-nums">
+              <div className="bg-white p-3 rounded-lg border border-slate-300">
+                <span className="text-slate-500 block text-[11px] font-sans font-medium">Throughput</span>
+                <span className="text-emerald-900 font-bold text-sm">{project.performanceIndicators.throughput}</span>
+              </div>
+              <div className="bg-white p-3 rounded-lg border border-slate-300">
+                <span className="text-slate-500 block text-[11px] font-sans font-medium">Memory Footprint</span>
+                <span className="text-blue-900 font-bold text-sm">{project.performanceIndicators.memoryFootprint}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Run-Cycle Efficiency & Stage Latency Graph (Moved below Sample Training Data Distribution) */}
+          <div className="bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
+                <Gauge className="w-4 h-4 text-emerald-800" />
+                <span>Run-Cycle Performance &amp; Efficiency</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold">
+                  P95: {project.performanceIndicators.latency}
+                </span>
+                <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 font-bold">
+                  P99: {comparisons[0]?.p99Time}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed">
+              Per-cycle execution profile across ingestion, forward tensor computation, and serialization stages.
+            </p>
+
+            <div className="space-y-3.5 bg-white p-4 rounded-xl border border-slate-300">
+              {cycleStages.map((s, idx) => (
                 <div key={idx} className="space-y-1.5">
                   <div className="flex justify-between text-[13px] font-semibold">
-                    <span className="text-slate-800">{dist.label}</span>
-                    <span className="text-slate-900 font-mono font-bold tabular-nums">
-                      {dist.percentage}% <span className="text-slate-500 font-normal">({dist.count})</span>
+                    <span className="text-slate-800">{s.stage}</span>
+                    <span className="text-blue-900 font-mono font-bold tabular-nums">
+                      {s.pct}% <span className="text-slate-500 font-normal">({s.ms}ms)</span>
                     </span>
                   </div>
                   <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-300">
                     <div
-                      className={`h-full bg-gradient-to-r ${distColors[idx % distColors.length]} rounded-full transition-all duration-300`}
-                      style={{ width: `${dist.percentage}%` }}
+                      className={`h-full bg-gradient-to-r ${s.barClass} rounded-full transition-all duration-300`}
+                      style={{ width: `${s.pct}%` }}
                     />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          <div className="pt-2 grid grid-cols-2 gap-3 text-xs font-mono tabular-nums">
-            <div className="bg-white p-3 rounded-lg border border-slate-300">
-              <span className="text-slate-500 block text-[11px] font-sans font-medium">Throughput</span>
-              <span className="text-emerald-900 font-bold text-sm">{project.performanceIndicators.throughput}</span>
+              ))}
             </div>
-            <div className="bg-white p-3 rounded-lg border border-slate-300">
-              <span className="text-slate-500 block text-[11px] font-sans font-medium">Memory Footprint</span>
-              <span className="text-blue-900 font-bold text-sm">{project.performanceIndicators.memoryFootprint}</span>
+
+            <div className="grid grid-cols-2 gap-3 text-xs font-mono tabular-nums">
+              <div className="bg-white p-3 rounded-xl border border-slate-300 flex items-center gap-2.5">
+                <Cpu className="w-4 h-4 text-blue-900 shrink-0" />
+                <div>
+                  <span className="text-slate-500 block text-[11px] font-sans font-medium">Hardware Target</span>
+                  <span className="text-slate-900 font-bold text-sm">{project.performanceIndicators.hardwareTarget}</span>
+                </div>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-300 flex items-center gap-2.5">
+                <Activity className="w-4 h-4 text-emerald-800 shrink-0" />
+                <div>
+                  <span className="text-slate-500 block text-[11px] font-sans font-medium">Compute Efficiency</span>
+                  <span className="text-emerald-900 font-bold text-sm">{hasRust ? '94.8% (Rust SIMD)' : '88.2% Vectorized'}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ROW 2: Run-Cycle Efficiency Graph + Model Baseline Comparison Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Run-Cycle Efficiency & Stage Latency Graph */}
-        <div className="lg:col-span-5 bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
-              <Gauge className="w-4 h-4 text-emerald-800" />
-              <span>Run-Cycle Performance &amp; Efficiency</span>
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold">
-                P95: {project.performanceIndicators.latency}
-              </span>
-              <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-rose-100 text-rose-900 border border-rose-300 font-bold">
-                P99: {comparisons[0]?.p99Time}
-              </span>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-700 leading-relaxed">
-            Per-cycle execution profile across ingestion, forward tensor computation, and serialization stages.
-          </p>
-
-          <div className="space-y-3.5 bg-white p-4 rounded-xl border border-slate-300">
-            {cycleStages.map((s, idx) => (
-              <div key={idx} className="space-y-1.5">
-                <div className="flex justify-between text-[13px] font-semibold">
-                  <span className="text-slate-800">{s.stage}</span>
-                  <span className="text-blue-900 font-mono font-bold tabular-nums">
-                    {s.pct}% <span className="text-slate-500 font-normal">({s.ms}ms)</span>
-                  </span>
-                </div>
-                <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-300">
-                  <div
-                    className={`h-full bg-gradient-to-r ${s.barClass} rounded-full transition-all duration-300`}
-                    style={{ width: `${s.pct}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-xs font-mono tabular-nums">
-            <div className="bg-white p-3 rounded-xl border border-slate-300 flex items-center gap-2.5">
-              <Cpu className="w-4 h-4 text-blue-900 shrink-0" />
-              <div>
-                <span className="text-slate-500 block text-[11px] font-sans font-medium">Hardware Target</span>
-                <span className="text-slate-900 font-bold text-sm">{project.performanceIndicators.hardwareTarget}</span>
-              </div>
-            </div>
-            <div className="bg-white p-3 rounded-xl border border-slate-300 flex items-center gap-2.5">
-              <Activity className="w-4 h-4 text-emerald-800 shrink-0" />
-              <div>
-                <span className="text-slate-500 block text-[11px] font-sans font-medium">Compute Efficiency</span>
-                <span className="text-emerald-900 font-bold text-sm">{hasRust ? '94.8% (Rust SIMD)' : '88.2% Vectorized'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Baseline vs Proposed Model Comparison Graph & Benchmark Table */}
-        <div className="lg:col-span-7 bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
+      {/* ROW 2: Baseline vs Proposed Model Comparison Graph & Benchmark Table */}
+      <div className="bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
               <BarChart3 className="w-4 h-4 text-rose-900" />
@@ -907,9 +908,8 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
           </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 function getPros(project: FlagshipProject): string[] {
   const d = project.domain.toLowerCase();

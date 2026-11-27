@@ -217,21 +217,22 @@ export default function SimulatorMultiModalCharts({
     };
   });
 
-  // 4. 3D k-NN (k=9) & K-Means Decision Manifold
+  // 4. 3D k-NN (k=9) & K-Means Decision Manifold - 5 Vivid Cluster Families
   const centroids3D = [
-    { id: 'C1', label: 'C1(-2.6,1.5,-2.0)', x: -2.6, y: 1.5, z: -2.0, color: '#065f46' },
-    { id: 'C2', label: 'C2(2.5,1.9,-1.8)', x: 2.5, y: 1.9, z: -1.8, color: '#9f1239' },
-    { id: 'C3', label: 'C3(2.2,-1.6,2.2)', x: 2.2, y: -1.6, z: 2.2, color: '#b45309' },
-    { id: 'C4', label: 'C4(-2.4,-1.5,2.0)', x: -2.4, y: -1.5, z: 2.0, color: '#1e3a8a' }
+    { id: 'C1', label: 'C1: Emerald Core (-2.6, 1.5, -2.0)', x: -2.6, y: 1.5, z: -2.0, color: '#10b981', ringColor: '#34d399' },
+    { id: 'C2', label: 'C2: Crimson Frontier (2.5, 1.9, -1.8)', x: 2.5, y: 1.9, z: -1.8, color: '#f43f5e', ringColor: '#fb7185' },
+    { id: 'C3', label: 'C3: Solar Gold (2.2, -1.6, 2.2)', x: 2.2, y: -1.6, z: 2.2, color: '#f59e0b', ringColor: '#fde047' },
+    { id: 'C4', label: 'C4: Latent Azure (-2.4, -1.5, 2.0)', x: -2.4, y: -1.5, z: 2.0, color: '#0ea5e9', ringColor: '#7dd3fc' },
+    { id: 'C5', label: 'C5: Violet Ring (0.2, 2.2, 0.4)', x: 0.2, y: 2.2, z: 0.4, color: '#a855f7', ringColor: '#d8b4fe' }
   ];
   const query3D = { x: 0.1, y: 0.2, z: 0.1 };
-  const pts3D = Array.from({ length: 36 }, (_, idx) => {
+  const pts3D = Array.from({ length: 45 }, (_, idx) => {
     const c = centroids3D[idx % centroids3D.length];
     const px = c.x + (rand() - 0.5) * 2.2;
     const py = c.y + (rand() - 0.5) * 2.0;
     const pz = c.z + (rand() - 0.5) * 2.2;
     const dist = Math.hypot(px - query3D.x, py - query3D.y, pz - query3D.z);
-    return { id: idx, x: px, y: py, z: pz, color: c.color, dist };
+    return { id: idx, x: px, y: py, z: pz, color: c.color, dist, clusterId: c.id };
   });
   const k9Neighbors3D = [...pts3D].sort((a, b) => a.dist - b.dist).slice(0, 9);
 
@@ -374,7 +375,14 @@ export default function SimulatorMultiModalCharts({
               const x = 72 + idx * slotW + (slotW - barW) / 2;
               const barH = Math.max(8, (b.valPct / 100) * 144);
               const y = 192 - barH;
-              const isHigh = b.valPct >= 95;
+              const getBarColors = (valPct: number) => {
+                if (valPct >= 96) return { front: '#00f59b', top: '#6ee7b7', side: '#047857', text: '#065f46' };
+                if (valPct >= 93) return { front: '#10b981', top: '#34d399', side: '#065f46', text: '#065f46' };
+                if (valPct >= 85) return { front: '#06b6d4', top: '#67e8f9', side: '#0e7490', text: '#0e7490' };
+                if (valPct >= 75) return { front: '#f59e0b', top: '#fde047', side: '#b45309', text: '#92400e' };
+                return { front: '#f43f5e', top: '#fda4af', side: '#be123c', text: '#9f1239' };
+              };
+              const c = getBarColors(b.valPct);
               const staggerY = epochBars.length > 7 && idx % 2 === 1 ? -15 : 0;
               return (
                 <Bar3D
@@ -385,11 +393,11 @@ export default function SimulatorMultiModalCharts({
                   h={barH}
                   dx={9}
                   dy={-7}
-                  frontColor={isHigh ? CHART_COLORS.emeraldFront : CHART_COLORS.indigoFront}
-                  topColor={isHigh ? CHART_COLORS.emeraldTop : CHART_COLORS.indigoTop}
-                  sideColor={isHigh ? CHART_COLORS.emeraldSide : CHART_COLORS.indigoSide}
+                  frontColor={c.front}
+                  topColor={c.top}
+                  sideColor={c.side}
                   label={epochBars.length <= 14 ? `${b.valPct}` : undefined}
-                  labelColor={isHigh ? '#065f46' : '#312e81'}
+                  labelColor={c.text}
                   labelOffsetY={staggerY}
                   xLabel={`E${b.epoch}`}
                   subY={220}
@@ -445,6 +453,17 @@ export default function SimulatorMultiModalCharts({
               const barH = Math.max(14, ((tb.valPct - 70) / 30) * 144);
               const y = 192 - barH;
               const staggerY = idx % 2 === 1 ? -14 : 0;
+              const getTechColors = (id: string, active: boolean) => {
+                const map: Record<string, { front: string; top: string; side: string; text: string }> = {
+                  multimodal_transformer: { front: '#4f46e5', top: '#818cf8', side: '#312e81', text: '#312e81' },
+                  gbdt_catboost_xgb: { front: '#059669', top: '#34d399', side: '#065f46', text: '#065f46' },
+                  heterogeneous_graphsage: { front: '#d97706', top: '#fbbf24', side: '#92400e', text: '#78350f' },
+                  federated_contrastive: { front: '#0284c7', top: '#38bdf8', side: '#0369a1', text: '#0c4a6e' },
+                  physics_informed_pinn: { front: '#e11d48', top: '#fb7185', side: '#9f1239', text: '#881337' }
+                };
+                return map[id] || { front: '#4f46e5', top: '#818cf8', side: '#312e81', text: '#312e81' };
+              };
+              const tc = getTechColors(tb.id, tb.active);
               return (
                 <g
                   key={tb.id}
@@ -458,11 +477,11 @@ export default function SimulatorMultiModalCharts({
                     h={barH}
                     dx={12}
                     dy={-8}
-                    frontColor={tb.active ? CHART_COLORS.indigoFront : CHART_COLORS.emeraldFront}
-                    topColor={tb.active ? CHART_COLORS.indigoTop : CHART_COLORS.emeraldTop}
-                    sideColor={tb.active ? CHART_COLORS.indigoSide : CHART_COLORS.emeraldSide}
+                    frontColor={tc.front}
+                    topColor={tc.top}
+                    sideColor={tc.side}
                     label={`${tb.valPct}%${tb.active ? ' ★' : ''}`}
-                    labelColor={tb.active ? '#312e81' : '#065f46'}
+                    labelColor={tc.text}
                     labelOffsetY={staggerY}
                     xLabel={tb.shortName}
                     subY={220}
@@ -644,7 +663,7 @@ export default function SimulatorMultiModalCharts({
                   <text x={axY.px} y={axY.py - 8} textAnchor="middle" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisYLabel}>+Y(3.4)</text>
                   <text x={axZ.px - 6} y={axZ.py + 14} textAnchor="end" fontSize="11" fontFamily={CHART_FONTS.mono} fontWeight="700" fill={CHART_COLORS.axisZLabel}>+Z(3.8)</text>
 
-                  {/* k=9 Nearest Neighbor Rays */}
+                  {/* k=9 Nearest Neighbor Colored Rays */}
                   {k9Neighbors3D.map((n) => {
                     const np = project3D(n.x, n.y, n.z, yawDeg, pitchDeg, cx, cy, sc);
                     return (
@@ -654,9 +673,9 @@ export default function SimulatorMultiModalCharts({
                         y1={qProj.py}
                         x2={np.px}
                         y2={np.py}
-                        stroke="#4f46e5"
-                        strokeWidth="1.5"
-                        opacity="0.72"
+                        stroke={n.color}
+                        strokeWidth="1.8"
+                        opacity="0.85"
                       />
                     );
                   })}
@@ -696,7 +715,14 @@ export default function SimulatorMultiModalCharts({
                       </g>
                     );
                   })}
-                  <circle cx={qProj.px} cy={qProj.py} r="6.5" fill="#1e1b4b" stroke="#ffffff" strokeWidth="1.8" />
+                  {/* Query Node q: Radiant Gold Diamond with Target Halo */}
+                  <circle cx={qProj.px} cy={qProj.py} r="9.0" fill="none" stroke="#6366f1" strokeWidth="1.8" strokeDasharray="3 2" />
+                  <polygon
+                    points={`${qProj.px},${qProj.py - 7} ${qProj.px + 7},${qProj.py} ${qProj.px},${qProj.py + 7} ${qProj.px - 7},${qProj.py}`}
+                    fill="#fbbf24"
+                    stroke="#b45309"
+                    strokeWidth="1.5"
+                  />
                   <text
                     x={qProj.px}
                     y={qProj.py - 12}
@@ -707,7 +733,7 @@ export default function SimulatorMultiModalCharts({
                     fill="#1e1b4b"
                     style={{ paintOrder: 'stroke', stroke: '#f8fafc', strokeWidth: '3.5px' }}
                   >
-                    q(0.1,0.2,0.1)
+                    ★ q(0.1,0.2,0.1)
                   </text>
                 </>
               );
@@ -846,9 +872,26 @@ export default function SimulatorMultiModalCharts({
 
                   {voxels3D.map((v, i) => {
                     const s = v.size;
-                    const frontC = v.act > 0.72 ? '#4338ca' : v.act > 0.45 ? '#2563eb' : '#93c5fd';
-                    const topC = v.act > 0.72 ? '#818cf8' : v.act > 0.45 ? '#60a5fa' : '#bfdbfe';
-                    const sideC = v.act > 0.72 ? '#1e1b4b' : v.act > 0.45 ? '#1e3a8a' : '#3b82f6';
+                    let frontC = '#4f46e5';
+                    let topC = '#818cf8';
+                    let sideC = '#312e81';
+                    if (v.act >= 0.82) {
+                      frontC = '#ef4444'; // Hot Flame Crimson
+                      topC = '#f87171';
+                      sideC = '#b91c1c';
+                    } else if (v.act >= 0.65) {
+                      frontC = '#f59e0b'; // Solar Gold / Amber
+                      topC = '#fde047';
+                      sideC = '#b45309';
+                    } else if (v.act >= 0.45) {
+                      frontC = '#10b981'; // Spring Emerald
+                      topC = '#6ee7b7';
+                      sideC = '#047857';
+                    } else if (v.act >= 0.25) {
+                      frontC = '#06b6d4'; // Electric Cyan
+                      topC = '#67e8f9';
+                      sideC = '#0e7490';
+                    }
                     return (
                       <Bar3D
                         key={i}

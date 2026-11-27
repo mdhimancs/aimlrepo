@@ -346,7 +346,7 @@ export default function ThreeDResearchManifold({
           ['-4.0', '0.0', '+4.0']
         );
 
-        const segs = 28;
+        const segs = 32;
         const size = 8.4;
         const planeGeo = new THREE.PlaneGeometry(size, size, segs, segs);
         planeGeo.rotateX(-Math.PI / 2);
@@ -362,8 +362,27 @@ export default function ThreeDResearchManifold({
           const h = Math.max(0.18, basin);
           posAttr.setY(i, h);
 
-          const t = Math.min(1, h / 3.4);
-          _tmpColor.setHSL(0.46 - t * 0.42, 0.72, 0.45 + (1 - t) * 0.12);
+          // 7-stop scientific Turbo/Spectral gradient: Indigo -> Cyan -> Emerald -> Lime -> Gold -> Orange -> Crimson
+          const t = Math.max(0, Math.min(1, h / 3.4));
+          if (t < 0.16) {
+            const f = t / 0.16;
+            _tmpColor.setRGB(0.28 + (0.02 - 0.28) * f, 0.24 + (0.71 - 0.24) * f, 0.88 + (0.83 - 0.88) * f);
+          } else if (t < 0.35) {
+            const f = (t - 0.16) / 0.19;
+            _tmpColor.setRGB(0.02 + (0.06 - 0.02) * f, 0.71 + (0.73 - 0.71) * f, 0.83 + (0.51 - 0.83) * f);
+          } else if (t < 0.52) {
+            const f = (t - 0.35) / 0.17;
+            _tmpColor.setRGB(0.06 + (0.52 - 0.06) * f, 0.73 + (0.80 - 0.73) * f, 0.51 + (0.09 - 0.51) * f);
+          } else if (t < 0.68) {
+            const f = (t - 0.52) / 0.16;
+            _tmpColor.setRGB(0.52 + (0.96 - 0.52) * f, 0.80 + (0.68 - 0.80) * f, 0.09 + (0.04 - 0.09) * f);
+          } else if (t < 0.84) {
+            const f = (t - 0.68) / 0.16;
+            _tmpColor.setRGB(0.96 + (0.98 - 0.96) * f, 0.68 + (0.42 - 0.68) * f, 0.04 + (0.09 - 0.04) * f);
+          } else {
+            const f = (t - 0.84) / 0.16;
+            _tmpColor.setRGB(0.98 + (0.90 - 0.98) * f, 0.42 + (0.11 - 0.42) * f, 0.09 + (0.28 - 0.09) * f);
+          }
           colors.push(_tmpColor.r, _tmpColor.g, _tmpColor.b);
         }
         planeGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -371,15 +390,26 @@ export default function ThreeDResearchManifold({
 
         const surfaceMat = new THREE.MeshStandardMaterial({
           vertexColors: true,
-          roughness: 0.35,
-          metalness: 0.15,
+          roughness: 0.28,
+          metalness: 0.22,
           side: THREE.DoubleSide
         });
         const surfaceMesh = new THREE.Mesh(planeGeo, surfaceMat);
         surfaceMesh.castShadow = !isSoftwareGl;
         surfaceMesh.receiveShadow = true;
         graphGroup.add(surfaceMesh);
-        disposables.push(planeGeo, surfaceMat);
+
+        // Topographic wireframe overlay highlighting contours and saddles
+        const wireMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.22
+        });
+        const wireMesh = new THREE.Mesh(planeGeo, wireMat);
+        wireMesh.position.y = 0.005;
+        graphGroup.add(wireMesh);
+        disposables.push(planeGeo, surfaceMat, wireMat);
 
         const curvePts = pts.map((p, idx) => {
           const progress = idx / Math.max(1, pts.length - 1);
@@ -392,37 +422,76 @@ export default function ThreeDResearchManifold({
         });
         if (curvePts.length >= 2) {
           const curve = new THREE.CatmullRomCurve3(curvePts);
-          const tubeGeo = new THREE.TubeGeometry(curve, 48, 0.09, 10, false);
+          const tubeGeo = new THREE.TubeGeometry(curve, 54, 0.11, 12, false);
+          // Glowing golden iridescent descent trajectory tube
           const tubeMat = new THREE.MeshStandardMaterial({
-            color: 0x1e1b4b,
-            roughness: 0.25,
-            metalness: 0.55
+            color: 0xfbbf24,
+            roughness: 0.18,
+            metalness: 0.72,
+            emissive: 0xb45309,
+            emissiveIntensity: 0.35
           });
           const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+          tubeMesh.castShadow = !isSoftwareGl;
           graphGroup.add(tubeMesh);
           disposables.push(tubeGeo, tubeMat);
 
+          // Milestone waypoint epoch beads with dynamic chromatic ramp (Crimson -> Gold -> Cyan -> Emerald)
+          const beadGeo = new THREE.SphereGeometry(0.12, 16, 16);
+          const beadColors = [0xf43f5e, 0xf97316, 0xfbbf24, 0x06b6d4, 0x10b981];
+          curvePts.forEach((pt, bIdx) => {
+            if (bIdx % Math.max(1, Math.floor(curvePts.length / 5)) === 0 || bIdx === curvePts.length - 1) {
+              const bColor = beadColors[Math.min(beadColors.length - 1, Math.floor((bIdx / curvePts.length) * beadColors.length))];
+              const beadMat = new THREE.MeshStandardMaterial({
+                color: bColor,
+                roughness: 0.15,
+                metalness: 0.5,
+                emissive: bColor,
+                emissiveIntensity: 0.2
+              });
+              const bead = new THREE.Mesh(beadGeo, beadMat);
+              bead.position.copy(pt);
+              graphGroup.add(bead);
+              disposables.push(beadMat);
+            }
+          });
+          disposables.push(beadGeo);
+
+          // Converged Global Minimum with radiant emerald core and horizontal neon cyan halo ring
           const endPt = curvePts[curvePts.length - 1];
-          const orbGeo = new THREE.SphereGeometry(0.22, 20, 20);
+          const orbGeo = new THREE.SphereGeometry(0.26, 24, 24);
           const orbMat = new THREE.MeshStandardMaterial({
             color: 0x10b981,
-            roughness: 0.2,
-            metalness: 0.4
+            roughness: 0.15,
+            metalness: 0.5,
+            emissive: 0x059669,
+            emissiveIntensity: 0.45
           });
           const orb = new THREE.Mesh(orbGeo, orbMat);
           orb.position.copy(endPt);
           graphGroup.add(orb);
-          disposables.push(orbGeo, orbMat);
+
+          const haloGeo = new THREE.TorusGeometry(0.52, 0.04, 16, 40);
+          haloGeo.rotateX(Math.PI / 2);
+          const haloMat = new THREE.MeshBasicMaterial({
+            color: 0x06b6d4,
+            transparent: true,
+            opacity: 0.85
+          });
+          const halo = new THREE.Mesh(haloGeo, haloMat);
+          halo.position.copy(endPt);
+          graphGroup.add(halo);
+          disposables.push(orbGeo, orbMat, haloGeo, haloMat);
 
           const minLoss = pts[pts.length - 1]?.loss.toFixed(3) ?? '0.05';
           addLabel(
-            `Min (${endPt.x.toFixed(1)}, ${minLoss}, ${endPt.z.toFixed(1)})`,
-            [endPt.x, endPt.y + 1.15, endPt.z],
+            `★ Global Min: θ* (Loss: ${minLoss})`,
+            [endPt.x, endPt.y + 1.25, endPt.z],
             '#065f46',
             '#ecfdf5',
             '#10b981',
-            2.4,
-            0.46
+            2.75,
+            0.52
           );
         }
       } else if (activeMode === 'val_acc_pillars') {
@@ -433,13 +502,13 @@ export default function ThreeDResearchManifold({
           'Z: Track',
           ['E1', `E${Math.ceil(count / 2)}`, `E${count}`],
           ['33%', '66%', '100%'],
-          ['Val', 'Train', 'Base']
+          ['Val Acc (Front)', 'Train Acc (Mid)', 'Baseline (Back)']
         );
 
         const colSpacing = 8.0 / Math.max(1, count);
         const barGeo = new THREE.BoxGeometry(colSpacing * 0.58, 1, 0.95);
         barGeo.translate(0, 0.5, 0);
-        const mat = new THREE.MeshStandardMaterial({ roughness: 0.28, metalness: 0.18 });
+        const mat = new THREE.MeshStandardMaterial({ roughness: 0.22, metalness: 0.25 });
         const rows = 3;
         const inst = new THREE.InstancedMesh(barGeo, mat, count * rows);
         inst.castShadow = !isSoftwareGl;
@@ -460,11 +529,32 @@ export default function ThreeDResearchManifold({
             inst.setMatrixAt(idx, _dummyObj.matrix);
 
             if (r === 0) {
-              _tmpColor.setHex(pt.valAccuracy >= 0.93 ? 0x059669 : 0x4f46e5);
+              // Front Track (Validation Accuracy): Rich multi-tier performance gradient
+              if (pt.valAccuracy >= 0.96) {
+                _tmpColor.setHex(0x00f59b); // Radiant Spring Mint (Exceptional SLA)
+              } else if (pt.valAccuracy >= 0.93) {
+                _tmpColor.setHex(0x10b981); // Emerald (Target SLA met)
+              } else if (pt.valAccuracy >= 0.85) {
+                _tmpColor.setHex(0x06b6d4); // Cyan / Turquoise
+              } else if (pt.valAccuracy >= 0.75) {
+                _tmpColor.setHex(0xf59e0b); // Golden Amber
+              } else {
+                _tmpColor.setHex(0xf43f5e); // Hot Coral / Crimson
+              }
             } else if (r === 1) {
-              _tmpColor.setHex(0x1d4ed8);
+              // Middle Track (Training Accuracy): Sapphire -> Electric Indigo -> Violet
+              const progress = i / Math.max(1, count - 1);
+              if (progress < 0.4) {
+                _tmpColor.setHex(0x2563eb); // Royal Sapphire
+              } else if (progress < 0.75) {
+                _tmpColor.setHex(0x6366f1); // Electric Indigo
+              } else {
+                _tmpColor.setHex(0x8b5cf6); // Vibrant Purple / Violet
+              }
             } else {
-              _tmpColor.setHex(0x94a3b8);
+              // Back Track (Baseline Prior): Warm Bronze / Sunset Amber spectrum instead of dull grey
+              const progress = i / Math.max(1, count - 1);
+              _tmpColor.setHex(progress > 0.5 ? 0xea580c : 0xd97706);
             }
             inst.setColorAt(idx, _tmpColor);
             idx++;
@@ -476,19 +566,24 @@ export default function ThreeDResearchManifold({
         graphGroup.add(inst);
         disposables.push(barGeo, mat, inst);
 
+        // Track Identity floating badges along the right edge of each track
+        addLabel('Val Track (SLA ≥95%)', [4.6, 1.8, -1.9], '#065f46', '#ecfdf5', '#10b981', 2.3, 0.44);
+        addLabel('Train Track (Loss Min)', [4.6, 1.8, 0.0], '#1e1b4b', '#eef2ff', '#6366f1', 2.3, 0.44);
+        addLabel('Baseline Prior', [4.6, 1.8, 1.9], '#78350f', '#fef3c7', '#d97706', 2.1, 0.44);
+
         // Peak Val pillar callout cleanly above the tallest front bar
         const lastPt = pts[count - 1];
         if (lastPt) {
           const peakX = -4.0 + (count - 0.5) * colSpacing;
           const peakH = Math.max(0.25, lastPt.valAccuracy * 4.0);
           addLabel(
-            `E${lastPt.epoch} Val: ${(lastPt.valAccuracy * 100).toFixed(1)}%`,
-            [peakX, peakH + 0.55, -1.9],
+            `★ Peak Val Acc: ${(lastPt.valAccuracy * 100).toFixed(1)}% (E${lastPt.epoch})`,
+            [peakX, peakH + 0.65, -1.9],
             '#065f46',
             '#ecfdf5',
-            '#059669',
-            2.15,
-            0.44
+            '#10b981',
+            2.65,
+            0.52
           );
         }
       } else if (activeMode === 'k9_clusters') {
@@ -501,34 +596,37 @@ export default function ThreeDResearchManifold({
           ['-4.0', '0.0', '+4.0']
         );
 
+        // 6 distinct vibrant cluster color families with bright orbital halo rings
         const centroids = [
-          { label: 'C1 (-2.6, 1.4, -2.2)', pos: new THREE.Vector3(-2.6, 1.4, -2.2), color: '#065f46' },
-          { label: 'C2 (+2.6, 1.8, -2.0)', pos: new THREE.Vector3(2.6, 1.8, -2.0), color: '#9f1239' },
-          { label: 'C3 (+2.4, 1.2, +2.5)', pos: new THREE.Vector3(2.4, 1.2, 2.5), color: '#b45309' },
-          { label: 'C4 (-2.4, 2.5, +2.4)', pos: new THREE.Vector3(-2.4, 2.5, 2.4), color: '#1e3a8a' }
+          { label: 'C1: Core High-Density', pos: new THREE.Vector3(-2.8, 1.4, -2.4), color: '#065f46', hexColor: 0x10b981, ringColor: 0x34d399 },
+          { label: 'C2: Outlier Frontier', pos: new THREE.Vector3(2.8, 1.9, -2.2), color: '#9f1239', hexColor: 0xf43f5e, ringColor: 0xfb7185 },
+          { label: 'C3: Solar High-Var', pos: new THREE.Vector3(2.5, 1.2, 2.6), color: '#b45309', hexColor: 0xfbbf24, ringColor: 0xfde047 },
+          { label: 'C4: Latent Azure', pos: new THREE.Vector3(-2.6, 2.6, 2.4), color: '#0369a1', hexColor: 0x0ea5e9, ringColor: 0x7dd3fc },
+          { label: 'C5: Violet Manifold', pos: new THREE.Vector3(0.0, 3.1, -1.2), color: '#6b21a8', hexColor: 0xa855f7, ringColor: 0xd8b4fe },
+          { label: 'C6: Flame Transition', pos: new THREE.Vector3(1.8, 2.7, 0.4), color: '#c2410c', hexColor: 0xf97316, ringColor: 0xfdba74 }
         ];
-        const clusterColors = [0x059669, 0xbe123c, 0xd97706, 0x2563eb];
-        const nPts = 64;
-        const sphereGeo = new THREE.SphereGeometry(0.15, 16, 16);
-        const ptsMat = new THREE.MeshStandardMaterial({ roughness: 0.28, metalness: 0.25 });
+
+        const nPts = 84;
+        const sphereGeo = new THREE.SphereGeometry(0.16, 16, 16);
+        const ptsMat = new THREE.MeshStandardMaterial({ roughness: 0.22, metalness: 0.35 });
         const instPts = new THREE.InstancedMesh(sphereGeo, ptsMat, nPts);
         instPts.castShadow = !isSoftwareGl;
 
-        const positions: THREE.Vector3[] = [];
+        const positions: { pos: THREE.Vector3; clusterIdx: number }[] = [];
         for (let i = 0; i < nPts; i++) {
           const cIdx = i % centroids.length;
           const c = centroids[cIdx].pos;
           const p = new THREE.Vector3(
-            c.x + (rand() - 0.5) * 2.5,
-            Math.max(0.28, c.y + (rand() - 0.5) * 1.9),
-            c.z + (rand() - 0.5) * 2.5
+            c.x + (rand() - 0.5) * 2.3,
+            Math.max(0.28, c.y + (rand() - 0.5) * 1.8),
+            c.z + (rand() - 0.5) * 2.3
           );
-          positions.push(p);
+          positions.push({ pos: p, clusterIdx: cIdx });
           _dummyObj.position.copy(p);
           _dummyObj.scale.set(1, 1, 1);
           _dummyObj.updateMatrix();
           instPts.setMatrixAt(i, _dummyObj.matrix);
-          _tmpColor.setHex(clusterColors[cIdx]);
+          _tmpColor.setHex(centroids[cIdx].hexColor);
           instPts.setColorAt(i, _tmpColor);
         }
         instPts.instanceMatrix.needsUpdate = true;
@@ -537,44 +635,99 @@ export default function ThreeDResearchManifold({
         graphGroup.add(instPts);
         disposables.push(sphereGeo, ptsMat, instPts);
 
-        centroids.forEach((c) => {
-          addLabel(c.label, [c.pos.x, c.pos.y + 1.15, c.pos.z], c.color, 'rgba(255,255,255,0.95)', c.color, 2.35, 0.42);
-        });
+        // Centroid Spheres + Colored Orbital Halo Rings
+        const centroidGeo = new THREE.SphereGeometry(0.3, 20, 20);
+        const ringGeo = new THREE.TorusGeometry(0.72, 0.045, 14, 36);
+        ringGeo.rotateX(Math.PI / 2.6);
 
+        centroids.forEach((c) => {
+          const cMat = new THREE.MeshStandardMaterial({
+            color: c.hexColor,
+            roughness: 0.18,
+            metalness: 0.55,
+            emissive: c.hexColor,
+            emissiveIntensity: 0.28
+          });
+          const cMesh = new THREE.Mesh(centroidGeo, cMat);
+          cMesh.position.copy(c.pos);
+          graphGroup.add(cMesh);
+
+          const rMat = new THREE.MeshBasicMaterial({
+            color: c.ringColor,
+            transparent: true,
+            opacity: 0.85
+          });
+          const rMesh = new THREE.Mesh(ringGeo, rMat);
+          rMesh.position.copy(c.pos);
+          graphGroup.add(rMesh);
+
+          disposables.push(cMat, rMat);
+          addLabel(c.label, [c.pos.x, c.pos.y + 1.25, c.pos.z], c.color, 'rgba(255,255,255,0.96)', c.color, 2.5, 0.44);
+        });
+        disposables.push(centroidGeo, ringGeo);
+
+        // Radiant Gold Diamond Query Node q(0.2, 1.8, 0.1)
         const queryPos = new THREE.Vector3(0.2, 1.8, 0.1);
-        const qGeo = new THREE.OctahedronGeometry(0.32, 0);
+        const qGeo = new THREE.OctahedronGeometry(0.38, 0);
         const qMat = new THREE.MeshStandardMaterial({
-          color: 0x312e81,
-          roughness: 0.2,
-          metalness: 0.6
+          color: 0xfbbf24,
+          roughness: 0.15,
+          metalness: 0.75,
+          emissive: 0xd97706,
+          emissiveIntensity: 0.45
         });
         const qMesh = new THREE.Mesh(qGeo, qMat);
         qMesh.position.copy(queryPos);
         graphGroup.add(qMesh);
-        disposables.push(qGeo, qMat);
 
-        addLabel('q (0.2, 1.8, 0.1) k=9', [queryPos.x, queryPos.y + 0.85, queryPos.z], '#1e1b4b', '#eef2ff', '#4f46e5', 2.45, 0.44);
+        // Electric Indigo target halo ring around query point
+        const qHaloGeo = new THREE.TorusGeometry(0.65, 0.04, 16, 36);
+        qHaloGeo.rotateX(Math.PI / 2);
+        const qHaloMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.85 });
+        const qHaloMesh = new THREE.Mesh(qHaloGeo, qHaloMat);
+        qHaloMesh.position.copy(queryPos);
+        graphGroup.add(qHaloMesh);
+        disposables.push(qGeo, qMat, qHaloGeo, qHaloMat);
 
+        addLabel('★ Query Node q(0.2, 1.8, 0.1) · k=9', [queryPos.x, queryPos.y + 1.05, queryPos.z], '#1e1b4b', '#eef2ff', '#4f46e5', 2.85, 0.52);
+
+        // Calculate 9 Nearest Neighbors
         const k9Neighbors = [...positions]
-          .sort((a, b) => a.distanceToSquared(queryPos) - b.distanceToSquared(queryPos))
+          .sort((a, b) => a.pos.distanceToSquared(queryPos) - b.pos.distanceToSquared(queryPos))
           .slice(0, 9);
 
-        const lineVerts: number[] = [];
+        // Multi-color k=9 rays connecting query point to neighbors
+        const neighborRingGeo = new THREE.TorusGeometry(0.28, 0.035, 12, 24);
+        neighborRingGeo.rotateX(Math.PI / 2);
+
         k9Neighbors.forEach((n) => {
-          lineVerts.push(queryPos.x, queryPos.y, queryPos.z, n.x, n.y, n.z);
+          const cData = centroids[n.clusterIdx];
+          const lineGeo = new THREE.BufferGeometry().setFromPoints([queryPos, n.pos]);
+          const lineMat = new THREE.LineBasicMaterial({
+            color: cData.hexColor,
+            linewidth: 2,
+            transparent: true,
+            opacity: 0.92
+          });
+          graphGroup.add(new THREE.Line(lineGeo, lineMat));
+
+          // Neighbor Highlight Ring
+          const nRingMat = new THREE.MeshBasicMaterial({ color: cData.ringColor, transparent: true, opacity: 0.95 });
+          const nRingMesh = new THREE.Mesh(neighborRingGeo, nRingMat);
+          nRingMesh.position.copy(n.pos);
+          graphGroup.add(nRingMesh);
+
+          disposables.push(lineGeo, lineMat, nRingMat);
         });
-        const lineGeo = new THREE.BufferGeometry();
-        lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color: 0x4f46e5 });
-        graphGroup.add(new THREE.LineSegments(lineGeo, lineMat));
-        disposables.push(lineGeo, lineMat);
+        disposables.push(neighborRingGeo);
       } else {
+        // 3D Tensor Voxels
         buildCoordinateFrame(
           'X: Batch [0..5]',
           'Y: Layer [0..3]',
           'Z: Seq [0..5]',
           ['B=0', 'B=2', 'B=5'],
-          ['L=0', 'L=1', 'L=3'],
+          ['L=0 (Emb)', 'L=1 (Attn)', 'L=3 (Head)'],
           ['S=0', 'S=2', 'S=5']
         );
 
@@ -583,21 +736,45 @@ export default function ThreeDResearchManifold({
         const nz = 6;
         const total = nx * ny * nz;
         const voxGeo = new THREE.BoxGeometry(0.54, 0.54, 0.54);
-        const voxMat = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.22 });
+        const voxMat = new THREE.MeshStandardMaterial({ roughness: 0.22, metalness: 0.28 });
         const instVox = new THREE.InstancedMesh(voxGeo, voxMat, total);
         instVox.castShadow = !isSoftwareGl;
 
+        let maxAct = -1;
+        let maxPos = new THREE.Vector3();
         let idx = 0;
+
         for (let y = 0; y < ny; y++) {
           for (let x = 0; x < nx; x++) {
             for (let z = 0; z < nz; z++) {
-              const act = Math.abs(Math.sin(x * 0.7 + y * 0.9 + z * 0.5 + rand() * 0.4));
-              const s = 0.4 + act * 0.62;
-              _dummyObj.position.set((x - 2.5) * 1.1, 0.48 + y * 0.92, (z - 2.5) * 1.1);
+              const act = Math.abs(Math.sin(x * 0.72 + y * 0.88 + z * 0.52 + rand() * 0.35));
+              const s = 0.38 + act * 0.65;
+              const vx = (x - 2.5) * 1.1;
+              const vy = 0.48 + y * 0.95;
+              const vz = (z - 2.5) * 1.1;
+              _dummyObj.position.set(vx, vy, vz);
               _dummyObj.scale.set(s, s, s);
               _dummyObj.updateMatrix();
               instVox.setMatrixAt(idx, _dummyObj.matrix);
-              _tmpColor.setHSL(0.62 - act * 0.35, 0.78, 0.42 + act * 0.16);
+
+              if (act > maxAct) {
+                maxAct = act;
+                maxPos.set(vx, vy, vz);
+              }
+
+              // Full-spectrum thermal activation palette: Cosmic Indigo -> Cyan -> Emerald -> Sun Gold -> Hot Crimson
+              if (act < 0.22) {
+                _tmpColor.setRGB(0.24, 0.20, 0.65); // Cosmic Indigo/Violet
+              } else if (act < 0.42) {
+                _tmpColor.setRGB(0.04, 0.71, 0.92); // Electric Cyan
+              } else if (act < 0.62) {
+                _tmpColor.setRGB(0.08, 0.82, 0.42); // Radiant Emerald
+              } else if (act < 0.82) {
+                _tmpColor.setRGB(0.98, 0.72, 0.08); // Solar Gold/Amber
+              } else {
+                _tmpColor.setRGB(0.96, 0.18, 0.36); // Hot Flame Crimson
+              }
+
               instVox.setColorAt(idx, _tmpColor);
               idx++;
             }
@@ -609,7 +786,48 @@ export default function ThreeDResearchManifold({
         graphGroup.add(instVox);
         disposables.push(voxGeo, voxMat, instVox);
 
-        addLabel('Tensor Max (5, 3, 5)', [2.75, 4.15, 2.75], '#312e81', '#eef2ff', '#6366f1', 2.25, 0.44);
+        // 4 Layer Accent Slices: Horizontal colored boundary frame for each layer
+        const layerInfo = [
+          { name: 'L0: Token Emb (B×S×D)', color: 0x06b6d4, textColor: '#0e7490', bg: '#ecfeff', border: '#06b6d4' },
+          { name: 'L1: Self-Attn (8-Head)', color: 0x8b5cf6, textColor: '#5b21b6', bg: '#f5f3ff', border: '#8b5cf6' },
+          { name: 'L2: FFN SwiGLU (4×D)', color: 0xf59e0b, textColor: '#92400e', bg: '#fffbeb', border: '#f59e0b' },
+          { name: 'L3: Output Head Logits', color: 0x10b981, textColor: '#065f46', bg: '#ecfdf5', border: '#10b981' }
+        ];
+
+        const sliceGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(6.6, 0.05, 6.6));
+        layerInfo.forEach((info, lIdx) => {
+          const vy = 0.48 + lIdx * 0.95;
+          const sliceMat = new THREE.LineBasicMaterial({
+            color: info.color,
+            transparent: true,
+            opacity: 0.65
+          });
+          const sliceMesh = new THREE.LineSegments(sliceGeo, sliceMat);
+          sliceMesh.position.set(0, vy, 0);
+          graphGroup.add(sliceMesh);
+          disposables.push(sliceMat);
+
+          addLabel(info.name, [-3.8, vy + 0.12, 3.4], info.textColor, info.bg, info.border, 2.5, 0.42);
+        });
+        disposables.push(sliceGeo);
+
+        // Peak Activation Beacon & Label
+        const beaconGeo = new THREE.OctahedronGeometry(0.24, 0);
+        const beaconMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+        const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+        beacon.position.set(maxPos.x, maxPos.y + 0.65, maxPos.z);
+        graphGroup.add(beacon);
+        disposables.push(beaconGeo, beaconMat);
+
+        addLabel(
+          `★ Peak Attn: ${(maxAct).toFixed(3)} (L3·Head 2)`,
+          [maxPos.x, maxPos.y + 1.15, maxPos.z],
+          '#9f1239',
+          '#fff1f2',
+          '#f43f5e',
+          2.6,
+          0.48
+        );
       }
     };
 
@@ -771,48 +989,137 @@ export default function ThreeDResearchManifold({
           </button>
 
           {dockOpen && (
-            <div className="w-full bg-white/95 border border-slate-300 rounded-xl px-3 py-2 shadow-md flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1">
-                {[
-                  { id: 'loss_surface', label: '3D Loss Surface' },
-                  { id: 'val_acc_pillars', label: '3D Val Acc Pillars' },
-                  { id: 'k9_clusters', label: '3D k=9 Clusters' },
-                  { id: 'tensor_voxels', label: '3D Tensor Voxels' }
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setMode(tab.id as ThreeDGraphMode)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors border ${
-                      mode === tab.id
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+            <div className="w-full bg-white/95 border border-slate-300 rounded-xl p-2.5 shadow-md space-y-2">
+              {/* Dynamic Chromatic Palette Legend Strip */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[10.5px] font-mono border-b border-slate-200 pb-1.5">
+                {mode === 'loss_surface' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-800">Loss Spectrum:</span>
+                    <span className="inline-block h-2.5 w-32 rounded-full bg-gradient-to-r from-indigo-700 via-cyan-500 via-emerald-500 via-lime-500 via-amber-400 to-rose-600 shadow-2xs" />
+                    <span className="text-indigo-800 font-semibold">Min θ* (Indigo/Cyan)</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-emerald-800 font-semibold">Valley</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-amber-800 font-semibold">Saddle</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-rose-800 font-semibold">Peak (Crimson)</span>
+                    <span className="ml-1 inline-flex items-center gap-1 text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      <span>Golden Descent Path</span>
+                    </span>
+                  </div>
+                )}
+
+                {mode === 'val_acc_pillars' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-800">Pillar Tracks:</span>
+                    <span className="inline-flex items-center gap-1 text-emerald-800 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>Val Acc (Front: Coral &lt;75% · Amber · Cyan · Emerald ≥95%)</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-indigo-800 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                      <span>Train Acc (Mid: Sapphire→Violet)</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-amber-900 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                      <span className="w-2 h-2 rounded-full bg-orange-600" />
+                      <span>Baseline Prior (Back: Bronze Sunset)</span>
+                    </span>
+                  </div>
+                )}
+
+                {mode === 'k9_clusters' && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold text-slate-800">6 Clusters:</span>
+                    <span className="inline-flex items-center gap-1 text-emerald-900 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" /> C1 Emerald
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-rose-900 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" /> C2 Crimson
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" /> C3 Gold
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-sky-900 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-sky-500" /> C4 Azure
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-purple-500" /> C5 Violet
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-orange-900 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200 font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-orange-500" /> C6 Orange
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-amber-950 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+                      ★ Query q (Solar Gold) · k=9 Rays
+                    </span>
+                  </div>
+                )}
+
+                {mode === 'tensor_voxels' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-800">Activation Heat:</span>
+                    <span className="inline-block h-2.5 w-28 rounded-full bg-gradient-to-r from-indigo-800 via-cyan-500 via-emerald-500 via-amber-400 to-rose-600 shadow-2xs" />
+                    <span className="text-indigo-800 font-semibold">Cosmic Indigo (&lt;0.2)</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-cyan-800 font-semibold">Cyan</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-emerald-800 font-semibold">Emerald</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-amber-800 font-semibold">Gold</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-rose-800 font-semibold">Peak Flame (1.0)</span>
+                    <span className="text-slate-600 font-bold">| Slices:</span>
+                    <span className="text-cyan-800 font-bold">L0 Emb</span>
+                    <span className="text-purple-800 font-bold">L1 Attn</span>
+                    <span className="text-amber-800 font-bold">L2 SwiGLU</span>
+                    <span className="text-emerald-800 font-bold">L3 Logits</span>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] font-mono text-slate-500 mr-1 flex items-center gap-1">
-                  <Compass className="w-3 h-3" /> View:
-                </span>
-                {(['iso', 'top', 'front'] as const).map((cam) => (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1">
+                  {[
+                    { id: 'loss_surface', label: '3D Loss Surface' },
+                    { id: 'val_acc_pillars', label: '3D Val Acc Pillars' },
+                    { id: 'k9_clusters', label: '3D k=9 Clusters' },
+                    { id: 'tensor_voxels', label: '3D Tensor Voxels' }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setMode(tab.id as ThreeDGraphMode)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors border ${
+                        mode === tab.id
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-mono text-slate-500 mr-1 flex items-center gap-1">
+                    <Compass className="w-3 h-3" /> View:
+                  </span>
+                  {(['iso', 'top', 'front'] as const).map((cam) => (
+                    <button
+                      key={cam}
+                      onClick={() => cameraPresetRef.current(cam)}
+                      className="px-2 py-1 rounded-md text-[10.5px] font-mono font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 uppercase"
+                    >
+                      {cam}
+                    </button>
+                  ))}
                   <button
-                    key={cam}
-                    onClick={() => cameraPresetRef.current(cam)}
-                    className="px-2 py-1 rounded-md text-[10.5px] font-mono font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 uppercase"
+                    onClick={() => cameraPresetRef.current('iso')}
+                    title="Reset camera"
+                    className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
                   >
-                    {cam}
+                    <RotateCcw className="w-3 h-3" />
                   </button>
-                ))}
-                <button
-                  onClick={() => cameraPresetRef.current('iso')}
-                  title="Reset camera"
-                  className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
+                </div>
               </div>
             </div>
           )}

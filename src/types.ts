@@ -357,4 +357,45 @@ export interface SyntheticDatasetProfile {
   columns: SyntheticColumnSchema[];
 }
 
+export interface DataCleaningChallenge {
+  title: string;
+  severity: 'Critical' | 'High' | 'Medium';
+  category: string;
+  rootCause: string;
+  impactArea: string;
+  remediation: string;
+  pipelineStage: string;
+  retentionLift: string;
+}
+
+export interface DataSourceMetadata {
+  benchmarkOrigin: string;
+  benchmarkCitation: string;
+  sourceUrl?: string;
+  syntheticGenerator: string;
+  fidelityScore: string;
+  differentialPrivacy: string;
+  dataLicense: string;
+  realWorldCohort: string;
+  generationTechnique: string;
+}
+
+export interface MLTechniqueComplexity {
+  techniqueId: string;
+  techniqueName: string;
+  shortName: string;
+  trainingTimeComplexity: string;
+  trainingTimeExplanation: string;
+  inferenceTimeComplexity: string;
+  inferenceLatencyExplanation: string;
+  spaceComplexity: string;
+  memoryFootprintExplanation: string;
+  flopsPerSample: string;
+  parameterScale: string;
+  scalingBottleneck: string;
+  accelerationHardware: string;
+  slaTarget: string;
+}
+
+
 
