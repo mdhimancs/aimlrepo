@@ -15,6 +15,8 @@ import { CHART_COLORS, CHART_FONTS } from '../utils/chartTheme';
 
 interface ProjectTelemetryChartsProps {
   project: FlagshipProject;
+  compactSplit?: boolean;
+  sectionFilter?: 'all' | 'convergence' | 'performance';
 }
 
 interface ComparisonRow {
@@ -167,7 +169,11 @@ function buildComparisons(project: FlagshipProject): ComparisonRow[] {
   ];
 }
 
-export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChartsProps) {
+export default function ProjectTelemetryCharts({
+  project,
+  compactSplit = false,
+  sectionFilter = 'all'
+}: ProjectTelemetryChartsProps) {
   const [hoveredEpochIdx, setHoveredEpochIdx] = useState<number | null>(null);
   const history = project.epochHistory;
   const maxLoss = Math.max(2.2, ...history.map((h) => h.loss * 1.1));
@@ -236,20 +242,26 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
     return [...upperPts, ...lowerPts].join(' ');
   }, [history, stepX]);
 
+  const showConvergence = sectionFilter === 'all' || sectionFilter === 'convergence';
+  const showPerformance = sectionFilter === 'all' || sectionFilter === 'performance';
+
   return (
     <div className="space-y-6">
       {/* Interactive Three.js WebGL 3D Research Manifold */}
-      <ThreeDResearchManifold
-        project={project}
-        epochPoints={history}
-        initialMode="val_acc_pillars"
-        heightClass="h-[420px]"
-      />
+      {showConvergence && (
+        <ThreeDResearchManifold
+          project={project}
+          epochPoints={history}
+          initialMode="val_acc_pillars"
+          heightClass={compactSplit ? 'h-[380px]' : 'h-[500px]'}
+        />
+      )}
 
       {/* ROW 1: Training Convergence + Accuracy/Deviation Band + Sample Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className={compactSplit ? 'space-y-6' : 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start'}>
         {/* Graph 1: 3D Accuracy, Loss & Deviation Convergence */}
-        <div className="lg:col-span-7 bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-5 shadow-xs">
+        {showConvergence && (
+        <div className={`${compactSplit ? '' : 'lg:col-span-7 '}bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-5 shadow-xs`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
               <TrendingUp className="w-4 h-4 text-blue-900" />
@@ -584,10 +596,12 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
             </div>
           </div>
         </div>
+        )}
 
         {/* Right Column: Sample Data Distribution Breakdown + Run-Cycle Performance & Efficiency */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className={compactSplit ? 'space-y-6' : 'lg:col-span-5 space-y-6'}>
           {/* Sample Data Distribution Breakdown */}
+          {showConvergence && (
           <div className="bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
               <PieChart className="w-4 h-4 text-blue-900" />
@@ -636,8 +650,10 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
               </div>
             </div>
           </div>
+          )}
 
           {/* Run-Cycle Efficiency & Stage Latency Graph (Moved below Sample Training Data Distribution) */}
+          {showPerformance && (
           <div className="bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
@@ -694,10 +710,12 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 
       {/* ROW 2: Baseline vs Proposed Model Comparison Graph & Benchmark Table */}
+      {showPerformance && (
       <div className="bg-slate-100 p-6 rounded-xl border border-slate-300 space-y-4 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
@@ -907,9 +925,10 @@ export default function ProjectTelemetryCharts({ project }: ProjectTelemetryChar
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
+      )}
+    </div>
+  );
+}
 
 function getPros(project: FlagshipProject): string[] {
   const d = project.domain.toLowerCase();

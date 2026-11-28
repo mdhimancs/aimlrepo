@@ -398,7 +398,7 @@ ${citations.bibtex}
               <span className="text-[11px] font-mono text-slate-500 uppercase font-semibold block">
                 Formal Objective Formulation:
               </span>
-              <div className="bg-slate-900 text-emerald-300 font-mono p-3 rounded-lg text-xs overflow-x-auto text-center">
+              <div className="bg-slate-300/80 border border-slate-400/70 text-emerald-950 font-mono font-semibold p-3 rounded-lg text-xs overflow-x-auto text-center">
                 <code>
                   {`\\mathcal{L}_{total}(\\theta) = \\mathbb{E}_{(x, y) \\sim \\mathcal{D}}\\left[ \\mathcal{L}_{task}(f_\\theta(x), y) \\right] + \\lambda_1 \\cdot \\Omega_{reg}(\\theta) + \\lambda_2 \\cdot \\mathcal{L}_{calib}(p_t)`}
                 </code>

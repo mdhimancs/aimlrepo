@@ -324,7 +324,7 @@ export default function SimulatorMultiModalCharts({
         dataType={dataType}
         epochPoints={epochHistoryFor3D}
         initialMode="loss_surface"
-        heightClass="h-[460px]"
+        heightClass="h-[540px]"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

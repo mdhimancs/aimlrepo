@@ -106,7 +106,7 @@ export default function ThreeDResearchManifold({
   dataType = 'multimodal',
   epochPoints,
   initialMode = 'loss_surface',
-  heightClass = 'h-[470px]'
+  heightClass = 'h-[540px]'
 }: ThreeDResearchManifoldProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<ThreeDGraphMode>(initialMode);
@@ -171,14 +171,14 @@ export default function ThreeDResearchManifold({
     pmremGenerator.dispose();
 
     const camera = new THREE.PerspectiveCamera(44, width / height, 0.1, 120);
-    camera.position.set(10.2, 7.4, 10.8);
+    camera.position.set(11.4, 8.8, 12.0);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.07;
-    controls.target.set(0, 1.3, 0);
+    controls.target.set(0, 1.85, 0);
     controls.minDistance = 5.0;
-    controls.maxDistance = 26;
+    controls.maxDistance = 28;
     controls.minPolarAngle = 0.05;
     controls.maxPolarAngle = Math.PI - 0.05;
 
@@ -262,13 +262,13 @@ export default function ThreeDResearchManifold({
       zAxisTitle: string,
       xTicks: string[],
       yTicks: string[],
-      zTicks: string[]
+      zTicks: string[],
+      yLen = 4.4
     ) => {
       const ox = -5.1;
       const oy = 0.04;
       const oz = -5.1;
       const xLen = 10.2;
-      const yLen = 4.4;
       const zLen = 10.2;
 
       const addAxisLine = (p1: [number, number, number], p2: [number, number, number], hex: number) => {
@@ -318,8 +318,9 @@ export default function ThreeDResearchManifold({
         const px = -4.2 + idx * (8.4 / Math.max(1, xTicks.length - 1));
         addLabel(lbl, [px, oy + 0.24, 5.45], '#334155', 'rgba(255,255,255,0.95)', '#cbd5e1', 1.32, 0.42);
       });
+      const yTickStep = (yLen - 0.8) / Math.max(1, yTicks.length);
       yTicks.forEach((lbl, idx) => {
-        const py = 0.9 + idx * 1.15;
+        const py = 0.9 + idx * yTickStep;
         addLabel(lbl, [ox - 0.78, py, oz], '#065f46', 'rgba(255,255,255,0.95)', '#6ee7b7', 1.32, 0.42);
       });
       zTicks.forEach((lbl, idx) => {
@@ -342,9 +343,17 @@ export default function ThreeDResearchManifold({
           'Y: Loss L(θ)',
           'Z: Bias θ₂',
           ['-4.0', '0.0', '+4.0'],
-          ['1.0', '2.0', '3.0'],
-          ['-4.0', '0.0', '+4.0']
+          ['1.5', '3.0', '4.5', '6.0'],
+          ['-4.0', '0.0', '+4.0'],
+          6.8
         );
+
+        const evalLossHeight = (x: number, z: number) => {
+          const rSq = (x * x + z * z) * 0.095;
+          const ripple = Math.sin(x * 1.15) * Math.cos(z * 1.15) * 0.85;
+          const basin = 5.15 * (1 - Math.exp(-rSq)) + ripple + 0.48;
+          return Math.max(0.22, basin);
+        };
 
         const segs = 32;
         const size = 8.4;
@@ -356,14 +365,11 @@ export default function ThreeDResearchManifold({
         for (let i = 0; i < posAttr.count; i++) {
           const x = posAttr.getX(i);
           const z = posAttr.getZ(i);
-          const rSq = (x * x + z * z) * 0.095;
-          const ripple = Math.sin(x * 1.15) * Math.cos(z * 1.15) * 0.48;
-          const basin = 2.85 * (1 - Math.exp(-rSq)) + ripple + 0.35;
-          const h = Math.max(0.18, basin);
+          const h = evalLossHeight(x, z);
           posAttr.setY(i, h);
 
           // 7-stop scientific Turbo/Spectral gradient: Indigo -> Cyan -> Emerald -> Lime -> Gold -> Orange -> Crimson
-          const t = Math.max(0, Math.min(1, h / 3.4));
+          const t = Math.max(0, Math.min(1, h / 6.1));
           if (t < 0.16) {
             const f = t / 0.16;
             _tmpColor.setRGB(0.28 + (0.02 - 0.28) * f, 0.24 + (0.71 - 0.24) * f, 0.88 + (0.83 - 0.88) * f);
@@ -417,7 +423,8 @@ export default function ThreeDResearchManifold({
           const radius = (1 - progress) * 3.4 + 0.15;
           const px = Math.cos(angle) * radius;
           const pz = Math.sin(angle) * radius;
-          const py = Math.max(0.45, p.loss * 1.1 + 0.45);
+          const surfaceY = evalLossHeight(px, pz);
+          const py = Math.max(surfaceY + 0.18, p.loss * 2.1 + 0.55);
           return new THREE.Vector3(px, py, pz);
         });
         if (curvePts.length >= 2) {
@@ -881,13 +888,13 @@ export default function ThreeDResearchManifold({
 
     cameraPresetRef.current = (preset) => {
       if (preset === 'iso') {
-        camera.position.set(10.2, 7.4, 10.8);
+        camera.position.set(11.4, 8.8, 12.0);
       } else if (preset === 'top') {
-        camera.position.set(0.01, 15.0, 0.01);
+        camera.position.set(0.01, 16.5, 0.01);
       } else {
-        camera.position.set(0, 3.8, 13.5);
+        camera.position.set(0, 4.6, 14.8);
       }
-      controls.target.set(0, 1.3, 0);
+      controls.target.set(0, 1.85, 0);
       controls.update();
       requestRender();
     };
@@ -945,7 +952,7 @@ export default function ThreeDResearchManifold({
 
   const axisSummary =
     mode === 'loss_surface'
-      ? 'X: θ₁[-4..4] · Y: Loss[0..3.5] · Z: θ₂[-4..4]'
+      ? 'X: θ₁[-4..4] · Y: Loss[0..6.0] · Z: θ₂[-4..4]'
       : mode === 'val_acc_pillars'
         ? `X: Epoch[1..${points.length}] · Y: Acc[0..100%] · Z: Track`
         : mode === 'k9_clusters'

@@ -47,7 +47,9 @@ import {
   Star,
   GraduationCap,
   Download,
-  ArrowUp
+  ArrowUp,
+  GitCompareArrows,
+  ArrowLeftRight
 } from 'lucide-react';
 import { ProjectBlueprint, FlagshipProject, RagCitation, RagStatusResponse, SyntheticDataType, SyntheticVariant } from './types';
 import WhitePaperBlogTab from './components/WhitePaperBlogTab';
@@ -59,6 +61,7 @@ import RepoRagIngestionPanel from './components/RepoRagIngestionPanel';
 import ProjectSyntheticDatasetPanel from './components/ProjectSyntheticDatasetPanel';
 import GoogleScholarWhitePaper from './components/GoogleScholarWhitePaper';
 import ProjectEconomicsPanel from './components/ProjectEconomicsPanel';
+import TelemetryComparisonModal from './components/TelemetryComparisonModal';
 import MLTrainingSimulatorTab, { SimConfigState, TrainingLogEntry } from './components/MLTrainingSimulatorTab';
 import { buildColabPercentScript, downloadProjectGitZip, downloadProjectNotebook } from './utils/gitRepoBuilder';
 import { computeProjectEconomics, formatRsOnly, formatUsdOnly } from './utils/projectEconomics';
@@ -1718,8 +1721,33 @@ export default function App() {
   const [selectedRepoProject, setSelectedRepoProject] = useState<FlagshipProject | null>(ALL_REPOSITORY_PROJECTS[0]);
   const [codeRepoTargetProjectId, setCodeRepoTargetProjectId] = useState<string>((starredRepoProjects[0] || ALL_REPOSITORY_PROJECTS[0])?.id || '');
   const [copiedCodeIndex, setCopiedCodeIndex] = useState<number | null>(null);
+  const [compareSelectedIds, setCompareSelectedIds] = useState<string[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const repoSpecsRef = useRef<HTMLDivElement | null>(null);
   const storyboardSpecsRef = useRef<HTMLDivElement | null>(null);
+
+  const toggleCompareProject = (projectId: string) => {
+    setCompareSelectedIds((prev) => {
+      if (prev.includes(projectId)) {
+        return prev.filter((id) => id !== projectId);
+      }
+      if (prev.length < 2) {
+        return [...prev, projectId];
+      }
+      return [prev[1], projectId];
+    });
+  };
+
+  const swapCompareProjects = () => {
+    setCompareSelectedIds((prev) => (prev.length === 2 ? [prev[1], prev[0]] : prev));
+  };
+
+  const compareProjectA = compareSelectedIds[0]
+    ? ALL_REPOSITORY_PROJECTS.find((p) => p.id === compareSelectedIds[0]) || null
+    : null;
+  const compareProjectB = compareSelectedIds[1]
+    ? ALL_REPOSITORY_PROJECTS.find((p) => p.id === compareSelectedIds[1]) || null
+    : null;
 
   const handleViewRepoSpecs = (proj: FlagshipProject) => {
     setSelectedRepoProject(proj);
@@ -2456,41 +2484,76 @@ export default function App() {
                         </span>
                         <span className="text-slate-400">·</span>
                         <span className="text-slate-600">
-                          Click the <strong className="text-amber-700">Star</strong> button on any project to pin it to <strong className="text-indigo-700">Storyboard</strong>
+                          Click <strong className="text-amber-700">Star</strong> to pin to <strong className="text-indigo-700">Storyboard</strong> or select <strong className="text-blue-900">2 projects</strong> with <strong className="text-blue-900">Compare</strong> to launch split-view telemetry
                         </span>
                       </div>
-                      {hasActiveFilter && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRepoFilter('All');
-                            setStarredOnlyFilter(false);
-                            setRepoSearch('');
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold transition-colors"
-                        >
-                          Show All {ALL_REPOSITORY_PROJECTS.length} Projects
-                        </button>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {compareSelectedIds.length > 0 && (
+                          <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1">
+                            <GitCompareArrows className="w-3.5 h-3.5 text-indigo-900" />
+                            <span className="text-xs font-semibold text-slate-800">
+                              Selected: {compareSelectedIds.length}/2
+                            </span>
+                            {compareSelectedIds.length === 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowCompareModal(true)}
+                                className="ml-1 px-2 py-0.5 rounded bg-indigo-900 hover:bg-indigo-800 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                              >
+                                Compare Split View
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setCompareSelectedIds([])}
+                              className="ml-0.5 text-slate-500 hover:text-rose-700 text-[11px] font-semibold px-1 cursor-pointer"
+                              title="Clear selection"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        )}
+                        {hasActiveFilter && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRepoFilter('All');
+                              setStarredOnlyFilter(false);
+                              setRepoSearch('');
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold transition-colors"
+                          >
+                            Show All {ALL_REPOSITORY_PROJECTS.length} Projects
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Projects Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                       {filteredRepoProjects.map(proj => {
                         const isStarred = starredRepoIds.includes(proj.id);
+                        const compareIdx = compareSelectedIds.indexOf(proj.id);
+                        const isCompared = compareIdx !== -1;
                         return (
                     <div 
                       key={proj.id}
                       onClick={() => handleViewRepoSpecs(proj)}
-                      className={`cursor-pointer rounded-2xl bg-slate-100 border border-slate-300 p-6 transition-all duration-200 hover:bg-slate-200 hover:shadow-lg flex flex-col justify-between ${
-                        selectedRepoProject?.id === proj.id ? 'ring-2 ring-indigo-600/30 bg-slate-200 border-indigo-600' : ''
+                      className={`cursor-pointer rounded-2xl bg-slate-100 border p-6 transition-all duration-200 hover:bg-slate-200 hover:shadow-lg flex flex-col justify-between ${
+                        compareIdx === 0
+                          ? 'ring-2 ring-indigo-700/50 border-indigo-700 bg-indigo-50/40'
+                          : compareIdx === 1
+                          ? 'ring-2 ring-emerald-700/50 border-emerald-700 bg-emerald-50/40'
+                          : selectedRepoProject?.id === proj.id
+                          ? 'ring-2 ring-indigo-600/30 bg-slate-200 border-indigo-600'
+                          : 'border-slate-300'
                       }`}
                     >
                       <div>
                         <div className="flex items-start justify-between gap-2 mb-3">
                           <span className="text-xs font-semibold text-blue-900 uppercase tracking-wider leading-snug">{proj.domain}</span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className={`text-xs px-2.5 py-0.5 rounded-md font-medium border ${
+                          <div className="flex items-center flex-wrap justify-end gap-1.5 shrink-0">
+                            <span className={`text-xs px-2 py-0.5 rounded-md font-medium border ${
                               proj.difficulty === 'Beginner' 
                                 ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                                 : proj.difficulty === 'Intermediate'
@@ -2501,6 +2564,34 @@ export default function App() {
                             }`}>
                               {proj.difficulty}
                             </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleCompareProject(proj.id);
+                              }}
+                              aria-pressed={isCompared}
+                              aria-label={isCompared ? `Remove ${proj.title} from telemetry comparison` : `Select ${proj.title} for telemetry comparison`}
+                              title={isCompared ? `Selected as Compare ${compareIdx === 0 ? 'A' : 'B'} (click to deselect)` : 'Select to compare telemetry side-by-side'}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-sans font-semibold transition-all cursor-pointer ${
+                                compareIdx === 0
+                                  ? 'bg-indigo-900 text-white border-indigo-900 shadow-2xs'
+                                  : compareIdx === 1
+                                  ? 'bg-emerald-800 text-white border-emerald-800 shadow-2xs'
+                                  : 'bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-900 border-slate-300'
+                              }`}
+                            >
+                              <span
+                                className={`w-3 h-3 rounded-xs border flex items-center justify-center text-[9px] font-bold ${
+                                  isCompared
+                                    ? 'bg-white/20 border-white/70 text-white'
+                                    : 'border-slate-400 bg-white'
+                                }`}
+                              >
+                                {isCompared ? (compareIdx === 0 ? 'A' : 'B') : ''}
+                              </span>
+                              <span>{isCompared ? `Slot ${compareIdx === 0 ? 'A' : 'B'}` : 'Compare'}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2597,6 +2688,93 @@ export default function App() {
                   );
                 })}
                     </div>
+
+                    {/* Floating Sticky Telemetry Comparison Dock */}
+                    {compareSelectedIds.length > 0 && (
+                      <div className="sticky bottom-4 z-30 bg-white/95 backdrop-blur-md border-2 border-indigo-900/25 rounded-2xl p-3.5 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950 shrink-0">
+                            <GitCompareArrows className="w-4 h-4 text-indigo-900" />
+                            <span>Telemetry Compare:</span>
+                          </div>
+
+                          {/* Slot A */}
+                          {compareProjectA && (
+                            <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-300 text-indigo-950 rounded-xl px-2.5 py-1.5 text-xs max-w-[280px]">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-900 text-white font-mono text-[10px] font-bold shrink-0">
+                                A
+                              </span>
+                              <span className="font-semibold truncate">{compareProjectA.title}</span>
+                              <button
+                                type="button"
+                                onClick={() => toggleCompareProject(compareProjectA.id)}
+                                className="text-indigo-700 hover:text-rose-700 shrink-0 cursor-pointer"
+                                aria-label={`Remove ${compareProjectA.title}`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+
+                          <span className="text-[11px] font-mono font-bold text-slate-400">VS</span>
+
+                          {/* Slot B */}
+                          {compareProjectB ? (
+                            <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-xl px-2.5 py-1.5 text-xs max-w-[280px]">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-800 text-white font-mono text-[10px] font-bold shrink-0">
+                                B
+                              </span>
+                              <span className="font-semibold truncate">{compareProjectB.title}</span>
+                              <button
+                                type="button"
+                                onClick={() => toggleCompareProject(compareProjectB.id)}
+                                className="text-emerald-700 hover:text-rose-700 shrink-0 cursor-pointer"
+                                aria-label={`Remove ${compareProjectB.title}`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 border border-dashed border-slate-400 bg-slate-50 text-slate-600 rounded-xl px-3 py-1.5 text-xs font-medium">
+                              <span>Select 1 more project card to enable split-view</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {compareSelectedIds.length === 2 && (
+                            <button
+                              type="button"
+                              onClick={swapCompareProjects}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-900" />
+                              <span>Swap</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setCompareSelectedIds([])}
+                            className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-900 border border-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!compareProjectA || !compareProjectB}
+                            onClick={() => setShowCompareModal(true)}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs ${
+                              compareProjectA && compareProjectB
+                                ? 'bg-indigo-900 hover:bg-indigo-800 text-white cursor-pointer'
+                                : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                            }`}
+                          >
+                            <GitCompareArrows className="w-3.5 h-3.5" />
+                            <span>Open Split-View Telemetry Comparison</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -3176,18 +3354,18 @@ export default function App() {
                             </div>
                             <p className="text-slate-700 text-sm mb-4 leading-relaxed">{phase.description}</p>
                             
-                            <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
-                              <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-                                <span className="text-xs font-mono text-slate-400">phase_{phase.stepNumber}_code.py</span>
+                            <div className="bg-slate-300/85 rounded-xl border border-slate-400/70 overflow-hidden shadow-sm">
+                              <div className="bg-slate-300 px-4 py-2 border-b border-slate-400/70 flex items-center justify-between">
+                                <span className="text-xs font-mono text-slate-800 font-semibold">phase_{phase.stepNumber}_code.py</span>
                                 <button 
                                   onClick={() => handleCopyCode(phase.pythonSnippet, 100 + idx)}
-                                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800"
+                                  className="flex items-center gap-1.5 text-xs text-slate-800 hover:text-slate-950 px-2 py-1 rounded bg-white hover:bg-slate-50 border border-slate-400/60 cursor-pointer"
                                 >
-                                  {copiedCodeIndex === 100 + idx ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                  {copiedCodeIndex === 100 + idx ? <Check className="w-3.5 h-3.5 text-emerald-700" /> : <Copy className="w-3.5 h-3.5" />}
                                   <span>{copiedCodeIndex === 100 + idx ? 'Copied' : 'Copy'}</span>
                                 </button>
                               </div>
-                              <pre className="p-4 text-xs font-mono text-indigo-200 overflow-x-auto leading-relaxed">
+                              <pre className="p-4 text-xs font-mono bg-slate-300/80 text-slate-950 overflow-x-auto leading-relaxed">
                                 <code>{phase.pythonSnippet}</code>
                               </pre>
                             </div>
@@ -3743,6 +3921,16 @@ export default function App() {
             />
           </div>
         </div>
+      )}
+
+      {/* SPLIT-VIEW TELEMETRY COMPARISON MODAL */}
+      {showCompareModal && compareProjectA && compareProjectB && (
+        <TelemetryComparisonModal
+          projectA={compareProjectA}
+          projectB={compareProjectB}
+          onSwapProjects={swapCompareProjects}
+          onClose={() => setShowCompareModal(false)}
+        />
       )}
     </div>
   );

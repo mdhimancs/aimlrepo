@@ -44,7 +44,7 @@ function highlightCodeToJSX(code: string) {
   return lines.map((line, lineIdx) => {
     if (line.trim().startsWith('#') || line.trim().startsWith('//')) {
       return (
-        <div key={lineIdx} className="whitespace-pre text-slate-500 italic">
+        <div key={lineIdx} className="whitespace-pre text-slate-600 italic">
           {line}
         </div>
       );
@@ -64,15 +64,15 @@ function highlightCodeToJSX(code: string) {
       const matchedText = match[0];
 
       if (matchedText.startsWith('#') || matchedText.startsWith('//')) {
-        parts.push(<span key={match.index} className="text-slate-500 italic">{matchedText}</span>);
+        parts.push(<span key={match.index} className="text-slate-600 italic">{matchedText}</span>);
       } else if (matchedText.startsWith('"') || matchedText.startsWith("'")) {
-        parts.push(<span key={match.index} className="text-emerald-300">{matchedText}</span>);
+        parts.push(<span key={match.index} className="text-emerald-800 font-medium">{matchedText}</span>);
       } else if (!isNaN(Number(matchedText))) {
-        parts.push(<span key={match.index} className="text-amber-300">{matchedText}</span>);
+        parts.push(<span key={match.index} className="text-amber-800 font-medium">{matchedText}</span>);
       } else if (/^(?:Tensor|Module|HashMap|String|Result|Option|Self|Vec|f32|u64|u32|int|float|str|bool|torch|nn|F|rayon)$/.test(matchedText)) {
-        parts.push(<span key={match.index} className="text-cyan-300 font-semibold">{matchedText}</span>);
+        parts.push(<span key={match.index} className="text-sky-800 font-semibold">{matchedText}</span>);
       } else {
-        parts.push(<span key={match.index} className="text-purple-400 font-semibold">{matchedText}</span>);
+        parts.push(<span key={match.index} className="text-indigo-800 font-semibold">{matchedText}</span>);
       }
 
       lastIndex = regex.lastIndex;
@@ -628,19 +628,19 @@ export default function CodeRepoStructureTab({
 
           {/* Code Window: Colab / Jupyter Notebook Cell Renderer OR VS Code Syntax Highlighting */}
           {activeFile && activeFile.language === 'ipynb' && notebookViewMode === 'cells' ? (
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-md">
-              <div className="bg-slate-950 px-5 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <div className="bg-slate-300/85 rounded-2xl border border-slate-400/70 overflow-hidden shadow-sm">
+              <div className="bg-slate-300 px-5 py-3 border-b border-slate-400/70 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                  <span className="text-xs font-mono text-amber-300 font-semibold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span className="text-xs font-mono text-amber-950 font-semibold">
                     {activeFile.path}
                   </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-semibold">
                     Google Colab / Jupyter nbformat 4.5
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-mono text-slate-400">
+                  <span className="text-[11px] font-mono text-slate-700 font-medium">
                     {notebookCells.length} cells
                   </span>
                   <button
@@ -653,41 +653,37 @@ export default function CodeRepoStructureTab({
                   </button>
                 </div>
               </div>
-              <div className="p-4 space-y-4 max-h-[680px] overflow-y-auto bg-slate-950">
+              <div className="p-4 space-y-4 max-h-[680px] overflow-y-auto bg-slate-200">
                 {notebookCells.map((cell, cIdx) => (
                   <div
                     key={cell.id}
-                    className={`rounded-xl border overflow-hidden ${
-                      cell.cellType === 'markdown'
-                        ? 'bg-slate-900/80 border-slate-700'
-                        : 'bg-slate-900 border-slate-700'
-                    }`}
+                    className="rounded-xl border border-slate-400/60 overflow-hidden shadow-2xs bg-slate-300/85"
                   >
-                    <div className="px-3.5 py-2 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between gap-2">
+                    <div className="px-3.5 py-2 bg-slate-300 border-b border-slate-400/60 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-[11px] font-mono">
                         {cell.cellType === 'code' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 font-bold">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold">
                             <Play className="w-2.5 h-2.5 fill-current" />
                             <span>In [{cIdx + 1}]</span>
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold">
                             Markdown [{cIdx + 1}]
                           </span>
                         )}
                         {cell.title && (
-                          <span className="text-slate-300 font-semibold truncate">{cell.title}</span>
+                          <span className="text-slate-900 font-semibold truncate">{cell.title}</span>
                         )}
                       </div>
                       <button
                         type="button"
                         onClick={() => handleCopyCell(cell.id, cell.source)}
-                        className="text-[11px] font-mono text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-700/80 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                        className="text-[11px] font-mono text-slate-800 hover:text-slate-950 px-2 py-0.5 rounded bg-white hover:bg-slate-50 border border-slate-400/60 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                       >
                         {copiedCellId === cell.id ? (
                           <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="text-emerald-300">Copied</span>
+                            <Check className="w-3 h-3 text-emerald-700" />
+                            <span className="text-emerald-800 font-semibold">Copied</span>
                           </>
                         ) : (
                           <>
@@ -698,8 +694,8 @@ export default function CodeRepoStructureTab({
                       </button>
                     </div>
                     <div
-                      className={`p-4 font-mono overflow-x-auto whitespace-pre-wrap break-words leading-relaxed ${
-                        cell.cellType === 'markdown' ? 'text-slate-200' : 'text-indigo-200'
+                      className={`p-4 font-mono overflow-x-auto whitespace-pre-wrap break-words leading-relaxed bg-slate-300/80 ${
+                        cell.cellType === 'markdown' ? 'text-slate-800' : 'text-slate-950'
                       }`}
                       style={{ fontSize: `${Math.max(13, codeFontSize - 1)}px` }}
                     >
@@ -711,24 +707,24 @@ export default function CodeRepoStructureTab({
             </div>
           ) : (
             activeFile && (
-              <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-md">
-                <div className="bg-slate-950 px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+              <div className="bg-slate-300/85 rounded-2xl border border-slate-400/70 overflow-hidden shadow-sm">
+                <div className="bg-slate-300 px-5 py-3 border-b border-slate-400/70 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span className="ml-2 text-xs font-mono text-slate-300 font-semibold">
+                    <span className="ml-2 text-xs font-mono text-slate-900 font-semibold">
                       {activeFile.path}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-[11px] font-mono text-slate-400">
+                    <span className="text-[11px] font-mono text-slate-700 font-medium">
                       {activeFile.content.split('\n').length} lines
                     </span>
                   </div>
                 </div>
                 <div
-                  className="p-5 font-mono overflow-x-auto whitespace-pre-wrap break-words leading-relaxed max-h-[680px] bg-slate-950 text-indigo-200"
+                  className="p-5 font-mono overflow-x-auto whitespace-pre-wrap break-words leading-relaxed max-h-[680px] bg-slate-300/80 text-slate-950"
                   style={{ fontSize: `${codeFontSize}px` }}
                 >
                   <code>{highlightCodeToJSX(activeFile.content)}</code>
@@ -806,7 +802,7 @@ export default function CodeRepoStructureTab({
                 <p className="text-xs text-slate-600">
                   Unpack the downloaded zip (which also bundles <code className="font-mono">notebooks/{activeProject.id}_colab.ipynb</code>) and run the initializer script:
                 </p>
-                <div className="relative bg-slate-900 rounded-lg p-3 font-mono text-xs text-emerald-400 overflow-x-auto">
+                <div className="relative bg-slate-300/85 border border-slate-400/70 rounded-lg p-3 font-mono text-xs text-emerald-900 font-semibold overflow-x-auto">
                   <code>
                     unzip {activeProject.id}-git-repo.zip && cd {activeProject.id} && bash setup_git.sh
                   </code>
@@ -828,7 +824,7 @@ export default function CodeRepoStructureTab({
                     <span>{copiedGitScript ? 'Copied' : 'Copy Commands'}</span>
                   </button>
                 </div>
-                <div className="bg-slate-900 rounded-lg p-3.5 font-mono text-xs text-slate-200 overflow-x-auto whitespace-pre leading-relaxed">
+                <div className="bg-slate-300/85 border border-slate-400/70 rounded-lg p-3.5 font-mono text-xs text-slate-900 overflow-x-auto whitespace-pre leading-relaxed">
                   {generateGitPushCommands(activeProject)}
                 </div>
               </div>

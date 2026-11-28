@@ -166,12 +166,12 @@ export default function AnnotatedCodePipeline({
             {bannerSubtitle}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div className="inline-flex rounded-xl bg-white p-0.5 border border-slate-300 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          <div className="inline-flex rounded-lg bg-white p-0.5 border border-slate-300 text-[10px] font-semibold">
             <button
               type="button"
               onClick={() => setColabCellMode(true)}
-              className={`px-2.5 py-1.5 rounded-lg transition-colors ${
+              className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
                 colabCellMode ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-700 hover:text-slate-900'
               }`}
             >
@@ -180,7 +180,7 @@ export default function AnnotatedCodePipeline({
             <button
               type="button"
               onClick={() => setColabCellMode(false)}
-              className={`px-2.5 py-1.5 rounded-lg transition-colors ${
+              className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
                 !colabCellMode ? 'bg-blue-900 text-white shadow-2xs' : 'text-slate-700 hover:text-slate-900'
               }`}
             >
@@ -191,25 +191,25 @@ export default function AnnotatedCodePipeline({
           <button
             type="button"
             onClick={() => downloadProjectNotebook(project)}
-            className="px-3.5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            className="px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-md text-[10px] font-semibold flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
             title="Download .ipynb notebook ready for Google Colab or Jupyter"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3 h-3" />
             <span>Download .ipynb</span>
           </button>
 
           <button
             onClick={() => onCopyAll(project)}
-            className="px-4 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+            className="px-2 py-1 bg-blue-900 hover:bg-blue-800 text-white rounded-md text-[10px] font-semibold flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
           >
             {copiedAllId === project.id ? (
               <>
-                <Check className="w-4 h-4 text-emerald-400" />
+                <Check className="w-3 h-3 text-emerald-400" />
                 <span className="text-emerald-300 font-bold">Copied Colab Script!</span>
               </>
             ) : (
               <>
-                <Copy className="w-4 h-4" />
+                <Copy className="w-3 h-3" />
                 <span>Copy Colab Pipeline</span>
               </>
             )}
@@ -282,10 +282,10 @@ export default function AnnotatedCodePipeline({
             </div>
 
             {/* Right Annotated Source Viewer */}
-            <div className="lg:col-span-7 bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
-              <div className="bg-slate-950 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-mono text-slate-300 flex items-center gap-2">
-                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <div className="lg:col-span-7 bg-slate-300/85 rounded-2xl border border-slate-400/70 overflow-hidden shadow-sm">
+              <div className="bg-slate-300 px-4 py-2.5 border-b border-slate-400/70 flex items-center justify-between">
+                <span className="text-xs font-mono text-slate-900 flex items-center gap-2 font-semibold">
+                  <BookOpen className="w-3.5 h-3.5 text-amber-800" />
                   <span>
                     {colabCellMode
                       ? `${project.id}_colab.ipynb · Cell ${idx + 1}`
@@ -293,16 +293,16 @@ export default function AnnotatedCodePipeline({
                         ? `src/0${idx + 1}_kernel.rs`
                         : `src/0${idx + 1}_pipeline.py`}
                   </span>
-                  <span className="text-slate-500">// {colabCellMode ? 'Colab / Jupyter Cell' : 'Annotated Source'}</span>
+                  <span className="text-slate-600 font-normal">// {colabCellMode ? 'Colab / Jupyter Cell' : 'Annotated Source'}</span>
                 </span>
                 <button
                   onClick={() => onCopyCode(annotatedCode, copyIdx)}
-                  className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white transition-colors px-2.5 py-1 rounded bg-slate-800 cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs text-slate-800 hover:text-slate-950 transition-colors px-2.5 py-1 rounded bg-white hover:bg-slate-50 border border-slate-400/60 cursor-pointer"
                 >
                   {copiedCodeIndex === copyIdx ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400 font-semibold">Copied</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-700" />
+                      <span className="text-emerald-800 font-semibold">Copied</span>
                     </>
                   ) : (
                     <>
@@ -312,7 +312,7 @@ export default function AnnotatedCodePipeline({
                   )}
                 </button>
               </div>
-              <pre className="p-4 text-xs font-mono text-indigo-200 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed max-h-[460px]">
+              <pre className="p-4 text-xs font-mono bg-slate-300/80 text-slate-950 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed max-h-[460px]">
                 <code>{annotatedCode}</code>
               </pre>
             </div>

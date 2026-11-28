@@ -450,17 +450,17 @@ export default function WhitePaperBlogTab({
                       {sec.body}
                     </div>
                     {sec.codeSnippet && (
-                      <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-sm">
-                        <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-                          <span className="text-xs font-mono text-slate-300">{sec.codeSnippet.filename}</span>
+                      <div className="bg-slate-300/85 rounded-xl border border-slate-400/70 overflow-hidden shadow-sm">
+                        <div className="bg-slate-300 px-4 py-2 border-b border-slate-400/70 flex items-center justify-between">
+                          <span className="text-xs font-mono text-slate-900 font-semibold">{sec.codeSnippet.filename}</span>
                           <button
                             onClick={() => copySnippet(sec.codeSnippet!.code, `${activeEntry.article.id}_${sIdx}`)}
-                            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1 rounded bg-slate-800"
+                            className="flex items-center gap-1.5 text-xs text-slate-800 hover:text-slate-950 px-2.5 py-1 rounded bg-white hover:bg-slate-50 border border-slate-400/60 cursor-pointer"
                           >
                             {copiedCodeBlock === `${activeEntry.article.id}_${sIdx}` ? (
                               <>
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                <span className="text-emerald-400 font-semibold">Copied</span>
+                                <Check className="w-3.5 h-3.5 text-emerald-700" />
+                                <span className="text-emerald-800 font-semibold">Copied</span>
                               </>
                             ) : (
                               <>
@@ -470,7 +470,7 @@ export default function WhitePaperBlogTab({
                             )}
                           </button>
                         </div>
-                        <pre className="p-4 text-xs font-mono text-indigo-200 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+                        <pre className="p-4 text-xs font-mono bg-slate-300/80 text-slate-950 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
                           <code>{sec.codeSnippet.code}</code>
                         </pre>
                       </div>
